@@ -7,7 +7,7 @@ APP_DIR="${APP_DIR:-/opt/$APP_NAME}"
 SERVICE_NAME="$APP_NAME"
 ENV_FILE="/etc/default/$SERVICE_NAME"
 
-REPO_URL="${REPO_URL:-https://github.com/Flowbix/grafana-dashboard-sync-web.git}"
+REPO_URL="${REPO_URL:-https://github.com/JPx16x/grafana-dashboard-sync-web.git}"
 APP_PORT="${APP_PORT:-8080}"
 APP_USERNAME="${APP_USERNAME:-admin}"
 GUNICORN_WORKERS="${GUNICORN_WORKERS:-2}"

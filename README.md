@@ -40,4 +40,4 @@ Pacotes instalados automaticamente pelo instalador:
 Execute como root ou usando sudo:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Flowbix/grafana-dashboard-sync-web/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/JPx16x/grafana-dashboard-sync-web/main/install.sh | sudo bash
