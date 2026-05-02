@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Grafana Dashboard Sync</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #171b24;
+      --card-2: #1f2430;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #303645;
+      --primary: #f97316;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #facc15;
+      --info: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: radial-gradient(circle at top left, #1f2937 0, #0f1117 35%);
+      color: var(--text);
+    }
+
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    .header {
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+    }
+
+    .header p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--card), #121620);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+      margin-bottom: 20px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 16px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    input, select {
+      width: 100%;
+      background: #0b0e14;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--primary);
+    }
+
+    button {
+      margin-top: 22px;
+      background: var(--primary);
+      color: #111827;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #374151;
+      color: var(--text);
+      margin-right: 8px;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: #052e16;
+    }
+
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      background: var(--card-2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+    }
+
+    .status.ok {
+      color: var(--success);
+      border-color: rgba(34, 197, 94, 0.4);
+    }
+
+    .status.error {
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .status.warning {
+      color: var(--warning);
+      border-color: rgba(250, 204, 21, 0.4);
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      background: #111827;
+      font-size: 13px;
+    }
+
+    td {
+      background: rgba(255,255,255,0.02);
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--info);
+      font-size: 12px;
+    }
+
+    .badge-success {
+      background: rgba(34, 197, 94, 0.12);
+      color: var(--success);
+    }
+
+    .badge-error {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--danger);
+    }
+
+    .badge-warning {
+      background: rgba(250, 204, 21, 0.12);
+      color: var(--warning);
+    }
+
+    .mini-text {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .log-box {
+      background: #05070b;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      max-height: 420px;
+      overflow: auto;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .log-line {
+      margin-bottom: 4px;
+    }
+
+    .log-ok {
+      color: var(--success);
+    }
+
+    .log-error {
+      color: var(--danger);
+    }
+
+    .log-info {
+      color: var(--info);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .summary-item {
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .summary-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .summary-item strong {
+      font-size: 22px;
+    }
+
+    @media (max-width: 900px) {
+      .grid-3, .grid-2, .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+      <div>
+        <h1>Grafana Dashboard Sync</h1>
+        <p>Central para sincronizar dashboards entre organizacoes do Grafana.</p>
+      </div>
+      <a href="/logout" style="background:#374151;color:#e5e7eb;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:bold;">Sair</a>
+    </div>
+
+    <div class="card">
+      <h2>Conexao com Grafana</h2>
+
+      <div class="grid-3">
+        <div>
+          <label>URL do Grafana</label>
+          <input id="grafana_url" value="http://192.168.50.124:3000">
+        </div>
+
+        <div>
+          <label>Usuario</label>
+          <input id="grafana_user" value="admin">
+        </div>
+
+        <div>
+          <label>Senha</label>
+          <input id="grafana_password" type="password" placeholder="Senha do admin">
+        </div>
+      </div>
+
+      <button onclick="testConnection()">Testar conexao</button>
+
+      <div id="status" class="status">Aguardando teste de conexao...</div>
+    </div>
+
+    <div id="syncConfig" class="card hidden">
+      <div class="section-title">
+        <h2>Configuracao da sincronizacao</h2>
+        <span class="badge">Etapa 2</span>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <label>Organizacao origem/modelo</label>
+          <select id="source_org" onchange="loadSourceData()">
+            <option value="">Selecione uma organizacao origem</option>
+          </select>
+          <div class="mini-text">Exemplo: W.L</div>
+        </div>
+
+        <div>
+          <label>Datasource de referencia</label>
+          <select id="datasource_select">
+            <option value="">Selecione uma organizacao origem primeiro</option>
+          </select>
+          <div class="mini-text">O datasource selecionado deve existir com o mesmo nome nas orgs destino.</div>
+        </div>
+      </div>
+
+      <div id="sourceStatus" class="status">Aguardando selecao da organizacao origem...</div>
+    </div>
+
+    <div id="selectionArea" class="grid-2 hidden">
+      <div class="card">
+        <div class="section-title">
+          <h2>Dashboards da origem</h2>
+          <span id="dashCount" class="badge">0 encontrados</span>
+        </div>
+
+        <div class="actions">
+          <button class="btn-secondary" onclick="selectAllDashboards()">Selecionar todos</button>
+          <button class="btn-secondary" onclick="clearDashboards()">Limpar</button>
+        </div>
+
+        <div id="dashboardsArea">
+          Nenhum dashboard carregado.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <h2>Organizacoes destino</h2>
+          <span id="orgCount" class="badge">0 encontradas</span>
+        </div>
+
+        <div class="actions">
+          <button class="btn-secondary" onclick="selectAllTargets()">Selecionar todas</button>
+          <button class="btn-secondary" onclick="clearTargets()">Limpar</button>
+          <button class="btn-secondary" onclick="selectOnlyTestClients()">Selecionar testes</button>
+        </div>
+
+        <div id="targetOrgsArea">
+          Nenhuma organizacao carregada.
+        </div>
+      </div>
+    </div>
+
+    <div id="executionArea" class="card hidden">
+      <div class="section-title">
+        <h2>Execucao</h2>
+        <span class="badge badge-warning">Sempre teste com dry-run antes</span>
+      </div>
+
+      <div class="actions">
+        <button class="btn-success" onclick="runSync(true)">Executar Dry-run</button>
+        <button class="btn-danger" onclick="runSync(false)">Executar Sincronizacao Real</button>
+      </div>
+
+      <div id="executionStatus" class="status">Aguardando execucao...</div>
+
+      <div id="summaryArea" class="hidden"></div>
+
+      <h3>Logs</h3>
+      <div id="logsArea" class="log-box">
+        Nenhum log gerado ainda.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let loadedOrgs = [];
+    let loadedDashboards = [];
+    let loadedDatasources = [];
+
+    function getConnectionPayload() {
+      return {
+        grafana_url: document.getElementById("grafana_url").value,
+        grafana_user: document.getElementById("grafana_user").value,
+        grafana_password: document.getElementById("grafana_password").value
+      };
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    async function testConnection() {
+      const status = document.getElementById("status");
+      const syncConfig = document.getElementById("syncConfig");
+      const selectionArea = document.getElementById("selectionArea");
+      const executionArea = document.getElementById("executionArea");
+
+      status.className = "status";
+      status.textContent = "Testando conexao com o Grafana...";
+      syncConfig.classList.add("hidden");
+      selectionArea.classList.add("hidden");
+      executionArea.classList.add("hidden");
+
+      try {
+        const response = await fetch("/api/test-connection", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(getConnectionPayload())
+        });
+
+        const result = await response.json();
+
+        if (!result.ok) {
+          status.className = "status error";
+          status.textContent = result.message + "\n" + (result.details || "");
+          return;
+        }
+
+        loadedOrgs = result.orgs || [];
+
+        status.className = "status ok";
+        status.textContent = result.message + `\nOrganizacoes encontradas: ${loadedOrgs.length}`;
+
+        renderSourceSelect();
+        renderTargetOrgs();
+
+        syncConfig.classList.remove("hidden");
+        selectionArea.classList.remove("hidden");
+        executionArea.classList.remove("hidden");
+
+      } catch (error) {
+        status.className = "status error";
+        status.textContent = "Erro inesperado: " + error;
+      }
+    }
+
+    function renderSourceSelect() {
+      const select = document.getElementById("source_org");
+
+      let html = '<option value="">Selecione uma organizacao origem</option>';
+
+      loadedOrgs.forEach(org => {
+        const selected = org.name === "W.L" ? "selected" : "";
+        html += `<option value="${org.id}" data-name="${escapeHtml(org.name)}" ${selected}>${escapeHtml(org.name)} / ID ${org.id}</option>`;
+      });
+
+      select.innerHTML = html;
+
+      if (select.value) {
+        loadSourceData();
+      }
+    }
+
+    async function loadSourceData() {
+      const sourceStatus = document.getElementById("sourceStatus");
+      const sourceOrgId = document.getElementById("source_org").value;
+
+      if (!sourceOrgId) {
+        sourceStatus.className = "status";
+        sourceStatus.textContent = "Selecione uma organizacao origem.";
+        return;
+      }
+
+      sourceStatus.className = "status";
+      sourceStatus.textContent = "Carregando dashboards e datasources da origem...";
+
+      try {
+        const payload = {
+          ...getConnectionPayload(),
+          source_org_id: sourceOrgId
+        };
+
+        const response = await fetch("/api/source-data", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!result.ok) {
+          sourceStatus.className = "status error";
+          sourceStatus.textContent = result.message + "\n" + (result.details || "");
+          return;
+        }
+
+        loadedDashboards = result.dashboards || [];
+        loadedDatasources = result.datasources || [];
+
+        sourceStatus.className = "status ok";
+        sourceStatus.textContent = result.message;
+
+        renderDatasourceSelect();
+        renderDashboards();
+        renderTargetOrgs();
+
+      } catch (error) {
+        sourceStatus.className = "status error";
+        sourceStatus.textContent = "Erro inesperado: " + error;
+      }
+    }
+
+    function renderDatasourceSelect() {
+      const select = document.getElementById("datasource_select");
+
+      if (!loadedDatasources.length) {
+        select.innerHTML = '<option value="">Nenhum datasource encontrado</option>';
+        return;
+      }
+
+      let html = '<option value="">Selecione o datasource</option>';
+
+      loadedDatasources.forEach(ds => {
+        const selected = ds.name === "Mysql Principal" ? "selected" : "";
+        const label = `${ds.name} (${ds.type})${ds.isDefault ? " - default" : ""}`;
+        html += `<option value="${escapeHtml(ds.name)}" ${selected}>${escapeHtml(label)}</option>`;
+      });
+
+      select.innerHTML = html;
+    }
+
+    function renderDashboards() {
+      const area = document.getElementById("dashboardsArea");
+      const count = document.getElementById("dashCount");
+
+      count.textContent = `${loadedDashboards.length} encontrados`;
+
+      if (!loadedDashboards.length) {
+        area.innerHTML = "Nenhum dashboard encontrado.";
+        return;
+      }
+
+      let html = `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Dashboard</th>
+                <th>UID</th>
+                <th>Pasta</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      loadedDashboards.forEach(dash => {
+        const checked = ["advdcrk", "adx9pxm", "adck7hv"].includes(dash.uid) ? "checked" : "";
+
+        html += `
+          <tr>
+            <td><input type="checkbox" class="dash-check" value="${escapeHtml(dash.uid)}" ${checked}></td>
+            <td>${escapeHtml(dash.title)}</td>
+            <td><span class="badge">${escapeHtml(dash.uid)}</span></td>
+            <td>${escapeHtml(dash.folderTitle)}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      area.innerHTML = html;
+    }
+
+    function renderTargetOrgs() {
+      const area = document.getElementById("targetOrgsArea");
+      const count = document.getElementById("orgCount");
+      const sourceOrgId = document.getElementById("source_org").value;
+
+      const targets = loadedOrgs.filter(org => String(org.id) !== String(sourceOrgId));
+
+      count.textContent = `${targets.length} disponiveis`;
+
+      if (!targets.length) {
+        area.innerHTML = "Nenhuma organizacao destino disponivel.";
+        return;
+      }
+
+      let html = `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>ID</th>
+                <th>Organizacao</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      targets.forEach(org => {
+        const isTestClient = org.name.includes("CLIENTE TESTE");
+        const checked = isTestClient ? "checked" : "";
+
+        html += `
+          <tr>
+            <td><input type="checkbox" class="target-check" value="${org.id}" data-name="${escapeHtml(org.name)}" ${checked}></td>
+            <td>${org.id}</td>
+            <td>${escapeHtml(org.name)}</td>
+            <td><span class="badge badge-success">Disponivel</span></td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      area.innerHTML = html;
+    }
+
+    function selectAllDashboards() {
+      document.querySelectorAll(".dash-check").forEach(item => item.checked = true);
+    }
+
+    function clearDashboards() {
+      document.querySelectorAll(".dash-check").forEach(item => item.checked = false);
+    }
+
+    function selectAllTargets() {
+      document.querySelectorAll(".target-check").forEach(item => item.checked = true);
+    }
+
+    function clearTargets() {
+      document.querySelectorAll(".target-check").forEach(item => item.checked = false);
+    }
+
+    function selectOnlyTestClients() {
+      document.querySelectorAll(".target-check").forEach(item => {
+        item.checked = item.dataset.name.includes("CLIENTE TESTE");
+      });
+    }
+
+    function getSelectedDashboards() {
+      return Array.from(document.querySelectorAll(".dash-check:checked")).map(item => item.value);
+    }
+
+    function getSelectedTargets() {
+      return Array.from(document.querySelectorAll(".target-check:checked")).map(item => {
+        return {
+          id: Number(item.value),
+          name: item.dataset.name
+        };
+      });
+    }
+
+    function getSourceOrgName() {
+      const select = document.getElementById("source_org");
+      const option = select.options[select.selectedIndex];
+      return option ? option.dataset.name : "";
+    }
+
+    function buildSyncPayload(dryRun) {
+      return {
+        ...getConnectionPayload(),
+        source_org_id: Number(document.getElementById("source_org").value),
+        source_org_name: getSourceOrgName(),
+        datasource_name: document.getElementById("datasource_select").value,
+        dashboard_uids: getSelectedDashboards(),
+        target_orgs: getSelectedTargets(),
+        dry_run: dryRun
+      };
+    }
+
+    function validateSyncPayload(payload) {
+      if (!payload.source_org_id) {
+        return "Selecione a organizacao origem.";
+      }
+
+      if (!payload.datasource_name) {
+        return "Selecione o datasource de referencia.";
+      }
+
+      if (!payload.dashboard_uids.length) {
+        return "Selecione pelo menos um dashboard.";
+      }
+
+      if (!payload.target_orgs.length) {
+        return "Selecione pelo menos uma organizacao destino.";
+      }
+
+      return null;
+    }
+
+    async function runSync(dryRun) {
+      const executionStatus = document.getElementById("executionStatus");
+      const logsArea = document.getElementById("logsArea");
+      const summaryArea = document.getElementById("summaryArea");
+
+      const payload = buildSyncPayload(dryRun);
+      const validationError = validateSyncPayload(payload);
+
+      if (validationError) {
+        executionStatus.className = "status error";
+        executionStatus.textContent = validationError;
+        return;
+      }
+
+      if (!dryRun) {
+        const confirmText = `Voce vai executar sincronizacao REAL em ${payload.target_orgs.length} organizacao(oes). Deseja continuar?`;
+        if (!confirm(confirmText)) {
+          return;
+        }
+      }
+
+      executionStatus.className = "status warning";
+      executionStatus.textContent = dryRun
+        ? "Executando dry-run..."
+        : "Executando sincronizacao real...";
+
+      logsArea.innerHTML = "Executando...";
+      summaryArea.classList.add("hidden");
+      summaryArea.innerHTML = "";
+
+      try {
+        const response = await fetch("/api/run-sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!result.ok) {
+          executionStatus.className = "status error";
+          executionStatus.textContent = result.error || result.message || "Erro na execucao.";
+        } else {
+          executionStatus.className = "status ok";
+          executionStatus.textContent = dryRun
+            ? "Dry-run finalizado."
+            : "Sincronizacao real finalizada.";
+        }
+
+        renderSummary(result);
+        renderLogs(result.logs || []);
+
+      } catch (error) {
+        executionStatus.className = "status error";
+        executionStatus.textContent = "Erro inesperado: " + error;
+        logsArea.innerHTML = "";
+      }
+    }
+
+    function renderSummary(result) {
+      const summaryArea = document.getElementById("summaryArea");
+      const stats = result.stats || {};
+
+      summaryArea.classList.remove("hidden");
+
+      summaryArea.innerHTML = `
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span>Orgs destino</span>
+            <strong>${stats.orgs_total || 0}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Orgs OK</span>
+            <strong>${stats.orgs_ok || 0}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Dashboards OK</span>
+            <strong>${stats.dashboards_ok || 0}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Erros</span>
+            <strong>${(stats.orgs_error || 0) + (stats.dashboards_error || 0)}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Backups OK</span>
+            <strong>${stats.backups_ok || 0}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Datasources OK</span>
+            <strong>${stats.datasources_ok || 0}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Datasources erro</span>
+            <strong>${stats.datasources_error || 0}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Tempo</span>
+            <strong>${result.duration_seconds || 0}s</strong>
+          </div>
+        </div>
+
+        <div class="status">
+          Log salvo em: ${escapeHtml(result.log_path || "nao informado")}
+        </div>
+      `;
+    }
+
+    function renderLogs(logs) {
+      const logsArea = document.getElementById("logsArea");
+
+      if (!logs.length) {
+        logsArea.innerHTML = "Nenhum log retornado.";
+        return;
+      }
+
+      let html = "";
+
+      logs.forEach(log => {
+        let cls = "log-info";
+
+        if (log.level === "ok") {
+          cls = "log-ok";
+        }
+
+        if (log.level === "error") {
+          cls = "log-error";
+        }
+
+        html += `
+          <div class="log-line ${cls}">
+            [${escapeHtml(log.time)}] [${escapeHtml(log.level.toUpperCase())}] ${escapeHtml(log.message)}
+          </div>
+        `;
+      });
+
+      logsArea.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
