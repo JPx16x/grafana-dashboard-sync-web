@@ -42,3 +42,30 @@ Execute como root ou usando sudo:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/JPx16x/grafana-dashboard-sync-web/main/install.sh | sudo bash
+
+
+## Replicacao total com datasources
+
+A aplicacao possui uma opcao para criar automaticamente datasources ausentes nas organizacoes destino.
+
+Quando a opcao `Criar datasources ausentes nas organizacoes destino` estiver marcada, a ferramenta faz o seguinte fluxo:
+
+1. Valida os datasources selecionados na organizacao origem.
+2. Verifica se cada datasource existe na organizacao destino.
+3. Se existir, utiliza o datasource encontrado.
+4. Se nao existir, tenta criar o datasource na organizacao destino copiando a configuracao da origem.
+5. Apos isso, importa os dashboards selecionados usando os UIDs corretos dos datasources da organizacao destino.
+
+### Observacao sobre credenciais sensiveis
+
+O Grafana nao retorna senhas, tokens e outros campos sensiveis pela API apos o datasource ser criado.
+
+Por isso, alguns datasources podem ser criados com a estrutura correta, mas podem exigir ajuste manual de senha/token depois da criacao.
+
+Exemplos comuns:
+
+- MySQL com senha.
+- PostgreSQL com senha.
+- MSSQL com senha.
+- Zabbix com token ou Basic Auth.
+

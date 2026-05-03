@@ -421,7 +421,15 @@
             Selecione uma organizacao origem primeiro.
           </div>
 
-          <div class="mini-text">Selecione um ou mais datasources. Eles devem existir com o mesmo nome nas orgs destino.</div>
+          <label class="datasource-option" style="margin-top: 10px;">
+            <input type="checkbox" id="create_missing_datasources">
+            <div class="datasource-info">
+              <span class="datasource-name">Criar datasources ausentes nas organizações destino</span>
+              <span class="datasource-type">Quando marcado, a aplicação tenta copiar os datasources da org origem antes de importar os dashboards.</span>
+            </div>
+          </label>
+
+          <div class="mini-text">Se desmarcado, os datasources precisam existir com o mesmo nome nas orgs destino.</div>
         </div>
       </div>
 
@@ -812,6 +820,7 @@
         source_org_name: getSourceOrgName(),
         datasource_name: datasourceNames[0] || "",
         datasource_names: datasourceNames,
+        create_missing_datasources: document.getElementById("create_missing_datasources").checked,
         dashboard_uids: getSelectedDashboards(),
         target_orgs: getSelectedTargets(),
         dry_run: dryRun

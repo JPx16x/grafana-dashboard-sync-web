@@ -124,6 +124,85 @@ def get_datasource_by_name(
     return None
 
 
+def sanitize_datasource_payload(source_ds: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Prepara o payload para criar um datasource em outra org.
+
+    Observacao:
+    Campos sensiveis nao sao retornados pela API do Grafana.
+    Exemplo: senha, token, basicAuthPassword.
+    Por isso esta funcao copia a estrutura e configuracoes visiveis.
+    """
+    blocked_fields = {
+        "id",
+        "orgId",
+        "version",
+        "uid",
+        "readOnly",
+        "secureJsonFields",
+        "created",
+        "updated",
+    }
+
+    payload: Dict[str, Any] = {}
+
+    for key, value in source_ds.items():
+        if key in blocked_fields:
+            continue
+
+        if value is None:
+            continue
+
+        payload[key] = copy.deepcopy(value)
+
+    payload.setdefault("name", source_ds.get("name"))
+    payload.setdefault("type", source_ds.get("type"))
+    payload.setdefault("access", source_ds.get("access", "proxy"))
+    payload.setdefault("isDefault", False)
+
+    # Evita conflito de datasource default em varias orgs.
+    payload["isDefault"] = bool(source_ds.get("isDefault", False))
+
+    return payload
+
+
+def create_datasource_from_source(
+    session: requests.Session,
+    grafana_url: str,
+    target_org_id: int,
+    source_ds: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = sanitize_datasource_payload(source_ds)
+
+    response = session.post(
+        f"{grafana_url}/api/datasources",
+        headers=get_headers(target_org_id),
+        json=payload,
+        timeout=60,
+    )
+
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
+
+    data = response.json() or {}
+
+    # Algumas versoes retornam {"datasource": {...}}, outras retornam campos no topo.
+    created_ds = data.get("datasource") if isinstance(data, dict) else None
+
+    if not created_ds:
+        created_ds = get_datasource_by_name(
+            session,
+            grafana_url,
+            target_org_id,
+            payload.get("name", ""),
+        )
+
+    if not created_ds:
+        raise RuntimeError("Datasource criado, mas nao foi possivel localizar o retorno.")
+
+    return created_ds
+
+
 def list_folders(
     session: requests.Session,
     grafana_url: str,
@@ -378,6 +457,8 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
     started_at = datetime.now().isoformat()
     start_time = time.time()
 
+    create_missing_datasources = bool(config.get("create_missing_datasources", False))
+
     stats = {
         "orgs_total": 0,
         "orgs_ok": 0,
@@ -439,6 +520,7 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
         add_log(logs, "info", f"Org origem: {source_org_name} / ID {source_org_id}")
         add_log(logs, "info", f"Datasources de referencia: {', '.join(datasource_names)}")
         add_log(logs, "info", f"Modo dry-run: {'sim' if dry_run else 'nao'}")
+        add_log(logs, "info", f"Criar datasources ausentes: {'sim' if create_missing_datasources else 'nao'}")
 
         source_datasource_map: Dict[str, str] = {}
 
@@ -506,11 +588,48 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
                 )
 
                 if not target_ds:
-                    stats["datasources_error"] += 1
-                    target_missing_datasource = True
-                    missing_datasources.append(datasource_name)
-                    add_log(logs, "error", f"Datasource '{datasource_name}' nao encontrado na org {target_org_name}.")
-                    continue
+                    source_ds = get_datasource_by_name(
+                        session,
+                        grafana_url,
+                        source_org_id,
+                        datasource_name,
+                    )
+
+                    if create_missing_datasources:
+                        if dry_run:
+                            stats["datasources_ok"] += 1
+                            target_ds_uid = source_datasource_map[datasource_name]
+                            datasource_mappings.append({
+                                "name": datasource_name,
+                                "source_uid": source_datasource_map[datasource_name],
+                                "target_uid": target_ds_uid,
+                            })
+                            add_log(logs, "info", f"[DRY-RUN] Criaria datasource em {target_org_name}: {datasource_name}")
+                            continue
+
+                        try:
+                            created_ds = create_datasource_from_source(
+                                session,
+                                grafana_url,
+                                target_org_id,
+                                source_ds,
+                            )
+
+                            target_ds = created_ds
+                            add_log(logs, "ok", f"Datasource criado em {target_org_name}: {datasource_name}")
+
+                        except Exception as exc:
+                            stats["datasources_error"] += 1
+                            target_missing_datasource = True
+                            missing_datasources.append(datasource_name)
+                            add_log(logs, "error", f"Falha ao criar datasource '{datasource_name}' em {target_org_name}: {exc}")
+                            continue
+                    else:
+                        stats["datasources_error"] += 1
+                        target_missing_datasource = True
+                        missing_datasources.append(datasource_name)
+                        add_log(logs, "error", f"Datasource '{datasource_name}' nao encontrado na org {target_org_name}.")
+                        continue
 
                 target_ds_uid = target_ds.get("uid")
 
@@ -528,7 +647,7 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
                     "target_uid": target_ds_uid,
                 })
 
-                add_log(logs, "ok", f"Datasource destino encontrado em {target_org_name}: {datasource_name} / UID {target_ds_uid}")
+                add_log(logs, "ok", f"Datasource destino pronto em {target_org_name}: {datasource_name} / UID {target_ds_uid}")
 
             if target_missing_datasource:
                 stats["orgs_error"] += 1
