@@ -241,66 +241,78 @@ def backup_dashboard(
 
 def replace_datasource_references(
     obj: Any,
-    source_uid: str,
-    target_uid: str,
-    datasource_name: str,
+    datasource_mappings: List[Dict[str, str]],
 ) -> Any:
+    """
+    Substitui referencias de um ou mais datasources no JSON do dashboard.
+
+    Cada item de datasource_mappings contem:
+    - name
+    - source_uid
+    - target_uid
+    """
+    uid_map = {
+        item["source_uid"]: item["target_uid"]
+        for item in datasource_mappings
+        if item.get("source_uid") and item.get("target_uid")
+    }
+
+    name_to_target_uid = {
+        item["name"]: item["target_uid"]
+        for item in datasource_mappings
+        if item.get("name") and item.get("target_uid")
+    }
+
     if isinstance(obj, dict):
         new_obj = {}
 
         for key, value in obj.items():
             if key == "datasource" and isinstance(value, dict):
                 ds_obj = copy.deepcopy(value)
+                ds_uid = ds_obj.get("uid")
+                ds_name = ds_obj.get("name")
 
-                if ds_obj.get("uid") == source_uid or ds_obj.get("name") == datasource_name:
-                    ds_obj["uid"] = target_uid
-                    ds_obj["name"] = datasource_name
+                if ds_uid in uid_map:
+                    ds_obj["uid"] = uid_map[ds_uid]
 
-                new_obj[key] = replace_datasource_references(
-                    ds_obj,
-                    source_uid,
-                    target_uid,
-                    datasource_name,
-                )
+                if ds_name in name_to_target_uid:
+                    ds_obj["uid"] = name_to_target_uid[ds_name]
+                    ds_obj["name"] = ds_name
 
-            elif key == "uid" and value == source_uid:
-                new_obj[key] = target_uid
+                new_obj[key] = replace_datasource_references(ds_obj, datasource_mappings)
+
+            elif key == "uid" and value in uid_map:
+                new_obj[key] = uid_map[value]
 
             else:
-                new_obj[key] = replace_datasource_references(
-                    value,
-                    source_uid,
-                    target_uid,
-                    datasource_name,
-                )
+                new_obj[key] = replace_datasource_references(value, datasource_mappings)
 
         return new_obj
 
     if isinstance(obj, list):
         return [
-            replace_datasource_references(item, source_uid, target_uid, datasource_name)
+            replace_datasource_references(item, datasource_mappings)
             for item in obj
         ]
 
     if isinstance(obj, str):
-        return obj.replace(source_uid, target_uid)
+        new_value = obj
+        for source_uid, target_uid in uid_map.items():
+            new_value = new_value.replace(source_uid, target_uid)
+        return new_value
 
     return obj
 
 
 def prepare_dashboard_payload(
     source_dashboard_data: Dict[str, Any],
-    source_ds_uid: str,
-    target_ds_uid: str,
-    datasource_name: str,
+    datasource_mappings: List[Dict[str, str]],
 ) -> Dict[str, Any]:
     dashboard_json = copy.deepcopy(source_dashboard_data["dashboard"])
 
     dashboard_json = replace_datasource_references(
         dashboard_json,
-        source_uid=source_ds_uid,
-        target_uid=target_ds_uid,
-        datasource_name=datasource_name,
+        datasource_mappings=datasource_mappings,
     )
 
     dashboard_json["id"] = None
@@ -392,7 +404,19 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
         grafana_password = config.get("grafana_password", "")
         source_org_id = int(config.get("source_org_id"))
         source_org_name = config.get("source_org_name", f"Org {source_org_id}")
-        datasource_name = config.get("datasource_name", "").strip()
+        datasource_names = config.get("datasource_names") or []
+        if isinstance(datasource_names, str):
+            datasource_names = [datasource_names]
+
+        datasource_names = [
+            str(name).strip()
+            for name in datasource_names
+            if str(name).strip()
+        ]
+
+        # Compatibilidade com versoes antigas
+        if not datasource_names and config.get("datasource_name"):
+            datasource_names = [str(config.get("datasource_name")).strip()]
         dashboard_uids = config.get("dashboard_uids", [])
         target_orgs = config.get("target_orgs", [])
         dry_run = bool(config.get("dry_run", True))
@@ -400,8 +424,8 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
         if not grafana_url or not grafana_user or not grafana_password:
             raise RuntimeError("Informe URL, usuario e senha do Grafana.")
 
-        if not datasource_name:
-            raise RuntimeError("Informe o datasource de referencia.")
+        if not datasource_names:
+            raise RuntimeError("Selecione pelo menos um datasource de referencia.")
 
         if not dashboard_uids:
             raise RuntimeError("Selecione pelo menos um dashboard.")
@@ -413,25 +437,29 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
 
         add_log(logs, "info", f"Grafana: {grafana_url}")
         add_log(logs, "info", f"Org origem: {source_org_name} / ID {source_org_id}")
-        add_log(logs, "info", f"Datasource de referencia: {datasource_name}")
+        add_log(logs, "info", f"Datasources de referencia: {', '.join(datasource_names)}")
         add_log(logs, "info", f"Modo dry-run: {'sim' if dry_run else 'nao'}")
 
-        source_ds = get_datasource_by_name(
-            session,
-            grafana_url,
-            source_org_id,
-            datasource_name,
-        )
+        source_datasource_map: Dict[str, str] = {}
 
-        if not source_ds:
-            raise RuntimeError(f"Datasource '{datasource_name}' nao encontrado na org origem.")
+        for datasource_name in datasource_names:
+            source_ds = get_datasource_by_name(
+                session,
+                grafana_url,
+                source_org_id,
+                datasource_name,
+            )
 
-        source_ds_uid = source_ds.get("uid")
+            if not source_ds:
+                raise RuntimeError(f"Datasource '{datasource_name}' nao encontrado na org origem.")
 
-        if not source_ds_uid:
-            raise RuntimeError(f"Datasource '{datasource_name}' na org origem nao possui UID.")
+            source_ds_uid = source_ds.get("uid")
 
-        add_log(logs, "ok", f"Datasource origem encontrado: {datasource_name} / UID {source_ds_uid}")
+            if not source_ds_uid:
+                raise RuntimeError(f"Datasource '{datasource_name}' na org origem nao possui UID.")
+
+            source_datasource_map[datasource_name] = source_ds_uid
+            add_log(logs, "ok", f"Datasource origem encontrado: {datasource_name} / UID {source_ds_uid}")
 
         source_dashboards: Dict[str, Dict[str, Any]] = {}
 
@@ -465,35 +493,50 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
 
             add_log(logs, "info", f"Iniciando org destino: {target_org_name} / ID {target_org_id}")
 
-            target_ds = get_datasource_by_name(
-                session,
-                grafana_url,
-                target_org_id,
-                datasource_name,
-            )
+            datasource_mappings: List[Dict[str, str]] = []
+            target_missing_datasource = False
+            missing_datasources: List[str] = []
 
-            if not target_ds:
-                stats["datasources_error"] += 1
+            for datasource_name in datasource_names:
+                target_ds = get_datasource_by_name(
+                    session,
+                    grafana_url,
+                    target_org_id,
+                    datasource_name,
+                )
+
+                if not target_ds:
+                    stats["datasources_error"] += 1
+                    target_missing_datasource = True
+                    missing_datasources.append(datasource_name)
+                    add_log(logs, "error", f"Datasource '{datasource_name}' nao encontrado na org {target_org_name}.")
+                    continue
+
+                target_ds_uid = target_ds.get("uid")
+
+                if not target_ds_uid:
+                    stats["datasources_error"] += 1
+                    target_missing_datasource = True
+                    missing_datasources.append(datasource_name)
+                    add_log(logs, "error", f"Datasource '{datasource_name}' sem UID na org {target_org_name}.")
+                    continue
+
+                stats["datasources_ok"] += 1
+                datasource_mappings.append({
+                    "name": datasource_name,
+                    "source_uid": source_datasource_map[datasource_name],
+                    "target_uid": target_ds_uid,
+                })
+
+                add_log(logs, "ok", f"Datasource destino encontrado em {target_org_name}: {datasource_name} / UID {target_ds_uid}")
+
+            if target_missing_datasource:
                 stats["orgs_error"] += 1
                 org_result["status"] = "error"
-                org_result["error"] = f"Datasource '{datasource_name}' nao encontrado."
+                org_result["error"] = "Datasource(s) nao encontrado(s): " + ", ".join(missing_datasources)
                 result["orgs"].append(org_result)
-                add_log(logs, "error", f"Datasource '{datasource_name}' nao encontrado na org {target_org_name}. Pulando org.")
+                add_log(logs, "error", f"Org {target_org_name} ignorada por ausencia de datasource(s): {', '.join(missing_datasources)}")
                 continue
-
-            target_ds_uid = target_ds.get("uid")
-
-            if not target_ds_uid:
-                stats["datasources_error"] += 1
-                stats["orgs_error"] += 1
-                org_result["status"] = "error"
-                org_result["error"] = f"Datasource '{datasource_name}' sem UID."
-                result["orgs"].append(org_result)
-                add_log(logs, "error", f"Datasource '{datasource_name}' sem UID na org {target_org_name}. Pulando org.")
-                continue
-
-            stats["datasources_ok"] += 1
-            add_log(logs, "ok", f"Datasource destino encontrado em {target_org_name}: {datasource_name} / UID {target_ds_uid}")
 
             org_had_error = False
 
@@ -549,9 +592,7 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
 
                     dashboard_payload = prepare_dashboard_payload(
                         source_dashboard_data,
-                        source_ds_uid=source_ds_uid,
-                        target_ds_uid=target_ds_uid,
-                        datasource_name=datasource_name,
+                        datasource_mappings=datasource_mappings,
                     )
 
                     import_dashboard(

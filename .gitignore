@@ -8,3 +8,5 @@ backups/
 logs/
 instance/
 .pytest_cache/
+*.bkp*
+*.backup*

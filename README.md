@@ -12,6 +12,7 @@ A ferramenta permite escolher uma organização modelo, selecionar dashboards, d
 - Seleção da organização origem/modelo.
 - Listagem de dashboards da origem.
 - Listagem de datasources da origem.
+- Seleção de um ou mais datasources de referência.
 - Seleção de organizações destino.
 - Execução em modo dry-run.
 - Sincronização real.

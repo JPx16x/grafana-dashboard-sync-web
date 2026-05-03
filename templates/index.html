@@ -242,6 +242,59 @@
       display: none;
     }
 
+    .datasource-list {
+      background: #0b0e14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      min-height: 132px;
+      max-height: 210px;
+      overflow: auto;
+    }
+
+    .datasource-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s ease, border 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .datasource-option:hover {
+      background: rgba(255,255,255,0.04);
+      border-color: var(--border);
+    }
+
+    .datasource-option input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--primary);
+    }
+
+    .datasource-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .datasource-name {
+      font-weight: bold;
+      color: var(--text);
+    }
+
+    .datasource-type {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    select[multiple] {
+      min-height: 132px;
+    }
+
     .log-box {
       background: #05070b;
       border: 1px solid var(--border);
@@ -357,11 +410,18 @@
         </div>
 
         <div>
-          <label>Datasource de referencia</label>
-          <select id="datasource_select">
-            <option value="">Selecione uma organizacao origem primeiro</option>
-          </select>
-          <div class="mini-text">O datasource selecionado deve existir com o mesmo nome nas orgs destino.</div>
+          <label>Datasources de referencia</label>
+
+          <div class="actions" style="margin-bottom: 10px;">
+            <button type="button" class="btn-secondary" onclick="selectAllDatasources()">Selecionar todos</button>
+            <button type="button" class="btn-secondary" onclick="clearDatasources()">Limpar</button>
+          </div>
+
+          <div id="datasourcesArea" class="datasource-list">
+            Selecione uma organizacao origem primeiro.
+          </div>
+
+          <div class="mini-text">Selecione um ou mais datasources. Eles devem existir com o mesmo nome nas orgs destino.</div>
         </div>
       </div>
 
@@ -563,22 +623,31 @@
     }
 
     function renderDatasourceSelect() {
-      const select = document.getElementById("datasource_select");
+      const area = document.getElementById("datasourcesArea");
 
       if (!loadedDatasources.length) {
-        select.innerHTML = '<option value="">Nenhum datasource encontrado</option>';
+        area.innerHTML = "Nenhum datasource encontrado.";
         return;
       }
 
-      let html = '<option value="">Selecione o datasource</option>';
+      let html = "";
 
       loadedDatasources.forEach(ds => {
-        const selected = ds.name === "Mysql Principal" ? "selected" : "";
-        const label = `${ds.name} (${ds.type})${ds.isDefault ? " - default" : ""}`;
-        html += `<option value="${escapeHtml(ds.name)}" ${selected}>${escapeHtml(label)}</option>`;
+        const checked = ds.name === "Mysql Principal" || ds.name === "mysql -lab" ? "checked" : "";
+        const label = `${ds.type}${ds.isDefault ? " - default" : ""}`;
+
+        html += `
+          <label class="datasource-option">
+            <input type="checkbox" class="datasource-check" value="${escapeHtml(ds.name)}" ${checked}>
+            <div class="datasource-info">
+              <span class="datasource-name">${escapeHtml(ds.name)}</span>
+              <span class="datasource-type">${escapeHtml(label)}</span>
+            </div>
+          </label>
+        `;
       });
 
-      select.innerHTML = html;
+      area.innerHTML = html;
     }
 
     function renderDashboards() {
@@ -705,6 +774,20 @@
       return Array.from(document.querySelectorAll(".dash-check:checked")).map(item => item.value);
     }
 
+    function getSelectedDatasources() {
+      return Array.from(document.querySelectorAll(".datasource-check:checked"))
+        .map(item => item.value)
+        .filter(value => value);
+    }
+
+    function selectAllDatasources() {
+      document.querySelectorAll(".datasource-check").forEach(item => item.checked = true);
+    }
+
+    function clearDatasources() {
+      document.querySelectorAll(".datasource-check").forEach(item => item.checked = false);
+    }
+
     function getSelectedTargets() {
       return Array.from(document.querySelectorAll(".target-check:checked")).map(item => {
         return {
@@ -721,11 +804,14 @@
     }
 
     function buildSyncPayload(dryRun) {
+      const datasourceNames = getSelectedDatasources();
+
       return {
         ...getConnectionPayload(),
         source_org_id: Number(document.getElementById("source_org").value),
         source_org_name: getSourceOrgName(),
-        datasource_name: document.getElementById("datasource_select").value,
+        datasource_name: datasourceNames[0] || "",
+        datasource_names: datasourceNames,
         dashboard_uids: getSelectedDashboards(),
         target_orgs: getSelectedTargets(),
         dry_run: dryRun
@@ -737,8 +823,8 @@
         return "Selecione a organizacao origem.";
       }
 
-      if (!payload.datasource_name) {
-        return "Selecione o datasource de referencia.";
+      if (!payload.datasource_names || !payload.datasource_names.length) {
+        return "Selecione pelo menos um datasource de referencia.";
       }
 
       if (!payload.dashboard_uids.length) {
