@@ -171,8 +171,19 @@ def create_datasource_from_source(
     grafana_url: str,
     target_org_id: int,
     source_ds: Dict[str, Any],
+    secure_json_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     payload = sanitize_datasource_payload(source_ds)
+
+    secure_clean: Dict[str, Any] = {}
+
+    if isinstance(secure_json_data, dict):
+        for key, value in secure_json_data.items():
+            if key and value not in (None, ""):
+                secure_clean[str(key)] = str(value)
+
+    if secure_clean:
+        payload["secureJsonData"] = secure_clean
 
     response = session.post(
         f"{grafana_url}/api/datasources",
@@ -458,6 +469,10 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
     start_time = time.time()
 
     create_missing_datasources = bool(config.get("create_missing_datasources", False))
+    datasource_secure_json_data = config.get("datasource_secure_json_data") or {}
+
+    if not isinstance(datasource_secure_json_data, dict):
+        datasource_secure_json_data = {}
 
     stats = {
         "orgs_total": 0,
@@ -608,11 +623,21 @@ def run_sync(config: Dict[str, Any]) -> Dict[str, Any]:
                             continue
 
                         try:
+                            secure_values = datasource_secure_json_data.get(datasource_name) or {}
+
+                            if secure_values:
+                                add_log(
+                                    logs,
+                                    "info",
+                                    f"Credenciais seguras informadas para {datasource_name}: {', '.join(secure_values.keys())}",
+                                )
+
                             created_ds = create_datasource_from_source(
                                 session,
                                 grafana_url,
                                 target_org_id,
                                 source_ds,
+                                secure_json_data=secure_values,
                             )
 
                             target_ds = created_ds
