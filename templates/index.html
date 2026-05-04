@@ -1050,6 +1050,122 @@
       logsArea.innerHTML = html;
     }
   </script>
+
+
+
+
+<!-- FBX_LOGO_START -->
+<style>
+  .fbx-main-header-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 26px !important;
+  }
+
+  .fbx-main-header-logo {
+    width: 110px;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    flex: 0 0 auto;
+  }
+
+  .fbx-main-header-text {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .fbx-main-header-text h1 {
+    margin: 0 !important;
+  }
+
+  .fbx-main-header-text p {
+    margin: 0 !important;
+  }
+
+  @media (max-width: 900px) {
+    .fbx-main-header-brand {
+      gap: 16px !important;
+    }
+
+    .fbx-main-header-logo {
+      width: 82px;
+    }
+  }
+
+  @media (max-width: 650px) {
+    .fbx-main-header-brand {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+    }
+
+    .fbx-main-header-logo {
+      width: 96px;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  const LOGO_URL = "https://storage.googleapis.com/flowbix-img/LogoFBX_noBck.png";
+
+  function textOf(el) {
+    return (el && el.textContent || "").trim();
+  }
+
+  function findMainTitle() {
+    return [...document.querySelectorAll("h1")]
+      .find(el => /grafana dashboard sync/i.test(textOf(el)));
+  }
+
+  function applyMainHeaderLogo() {
+    if (document.querySelector(".fbx-main-header-logo")) return;
+
+    const title = findMainTitle();
+    if (!title) return;
+
+    const subtitle = title.nextElementSibling;
+    const originalParent = title.parentElement;
+    if (!originalParent) return;
+
+    const brand = document.createElement("div");
+    brand.className = "fbx-main-header-brand";
+
+    const logo = document.createElement("img");
+    logo.src = LOGO_URL;
+    logo.alt = "Flowbix";
+    logo.className = "fbx-main-header-logo";
+
+    const textBox = document.createElement("div");
+    textBox.className = "fbx-main-header-text";
+
+    originalParent.insertBefore(brand, title);
+
+    brand.appendChild(logo);
+    brand.appendChild(textBox);
+
+    textBox.appendChild(title);
+
+    if (subtitle && subtitle.tagName && subtitle.tagName.toLowerCase() === "p") {
+      textBox.appendChild(subtitle);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", applyMainHeaderLogo);
+  window.addEventListener("load", applyMainHeaderLogo);
+
+  const observer = new MutationObserver(applyMainHeaderLogo);
+  document.addEventListener("DOMContentLoaded", () => {
+    observer.observe(document.body, { childList: true, subtree: true });
+    setTimeout(applyMainHeaderLogo, 300);
+    setTimeout(applyMainHeaderLogo, 1000);
+  });
+})();
+</script>
+<!-- FBX_LOGO_END -->
+
 </body>
 </html>
 
@@ -1144,6 +1260,63 @@
 @media (max-width: 700px) {
   .card:has(#source_org):has(#datasourcesArea) .credential-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+</style>
+
+<style>
+/* Ajuste visual Flowbix - tela principal */
+.fbx-main-header-brand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 34px !important;
+}
+
+.fbx-main-header-logo {
+  width: 190px !important;
+  max-width: 190px !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+  flex: 0 0 auto !important;
+}
+
+.fbx-main-header-text {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+}
+
+.fbx-main-header-text h1 {
+  margin: 0 !important;
+}
+
+.fbx-main-header-text p {
+  margin-top: 8px !important;
+}
+
+@media (max-width: 900px) {
+  .fbx-main-header-logo {
+    width: 145px !important;
+    max-width: 145px !important;
+  }
+
+  .fbx-main-header-brand {
+    gap: 22px !important;
+  }
+}
+
+@media (max-width: 650px) {
+  .fbx-main-header-brand {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 14px !important;
+  }
+
+  .fbx-main-header-logo {
+    width: 150px !important;
+    max-width: 150px !important;
   }
 }
 </style>

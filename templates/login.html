@@ -144,5 +144,103 @@
       Acesso restrito a administradores.
     </div>
   </form>
+
+<!-- FBX_LOGO_START -->
+<style>
+  .fbx-login-logo-wrap {
+    width: 150px;
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    background: transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin-bottom: 24px;
+  }
+
+  .fbx-login-logo-wrap img {
+    width: 150px;
+    height: auto;
+    object-fit: contain;
+    display: block;
+  }
+
+  @media (max-width: 768px) {
+    .fbx-login-logo-wrap {
+      width: 120px;
+      height: 70px;
+    }
+
+    .fbx-login-logo-wrap img {
+      width: 120px;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  const LOGO_URL = "https://storage.googleapis.com/flowbix-img/LogoFBX_noBck.png";
+
+  function textOf(el) {
+    return (el && el.textContent || "").trim();
+  }
+
+  function applyLoginLogo() {
+    if (document.querySelector(".fbx-login-logo-wrap")) return;
+
+    const gCandidates = [...document.querySelectorAll("div,span")]
+      .filter(el => textOf(el) === "G" && el.children.length === 0);
+
+    if (!gCandidates.length) return;
+
+    const gBox = gCandidates[0];
+
+    const wrap = document.createElement("div");
+    wrap.className = "fbx-login-logo-wrap";
+    wrap.innerHTML = '<img src="' + LOGO_URL + '" alt="Flowbix">';
+
+    gBox.replaceWith(wrap);
+  }
+
+  document.addEventListener("DOMContentLoaded", applyLoginLogo);
+  window.addEventListener("load", applyLoginLogo);
+
+  const observer = new MutationObserver(applyLoginLogo);
+  document.addEventListener("DOMContentLoaded", () => {
+    observer.observe(document.body, { childList: true, subtree: true });
+    setTimeout(applyLoginLogo, 300);
+    setTimeout(applyLoginLogo, 1000);
+  });
+})();
+</script>
+<!-- FBX_LOGO_END -->
+
 </body>
 </html>
+
+<style>
+/* Ajuste visual Flowbix - login */
+.fbx-login-logo-wrap {
+  width: 100% !important;
+  height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 auto 34px auto !important;
+}
+
+.fbx-login-logo-wrap img {
+  width: 230px !important;
+  max-width: 75% !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+}
+
+@media (max-width: 768px) {
+  .fbx-login-logo-wrap img {
+    width: 190px !important;
+  }
+}
+</style>
