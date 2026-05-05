@@ -453,6 +453,77 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Area de criacao de usuarios */
+.user-create-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.user-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.user-create-bulk textarea {
+  min-height: 150px;
+  resize: vertical;
+  width: 100%;
+}
+
+.user-create-file {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(7, 11, 18, 0.45);
+}
+
+.user-create-file input[type="file"] {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.user-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.user-create-result {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.user-create-result-row {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 13px;
+}
+
+.user-create-result-row.ok {
+  color: var(--success);
+}
+
+.user-create-result-row.error {
+  color: var(--danger);
+}
+
+@media (max-width: 1000px) {
+  .user-create-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-create-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 </style>
 
 </style>
@@ -581,6 +652,45 @@
 </div>
 
 
+
+<div id="userCreateArea" class="card hidden">
+  <div class="section-title">
+    <div>
+      <h2>Criar usuarios por CSV</h2>
+      <div class="mini-text">Crie usuarios e vincule cada um na organizacao informada no arquivo.</div>
+    </div>
+    <span class="badge">Opcional</span>
+  </div>
+
+  <div class="user-create-grid">
+    <div class="user-create-bulk">
+      <label>Dados dos usuarios</label>
+      <textarea id="bulk_user_csv" placeholder="usuario,email,nome,senha,role,organizacao&#10;joao,joao@cliente.com,Joao Silva,Senha@123,Viewer,CLIENTE TESTE 01&#10;maria,maria@cliente.com,Maria Souza,Senha@123,Editor,CLIENTE TESTE 02"></textarea>
+      <div class="mini-text">
+        Campos aceitos: usuario, email, nome, senha, role e organizacao. Role deve ser Viewer, Editor ou Admin.
+      </div>
+    </div>
+
+    <div class="user-create-file">
+      <strong>Importar CSV de usuarios</strong>
+      <div class="mini-text">
+        Use um CSV com cabecalho. A coluna organizacao deve conter exatamente o nome da organizacao no Grafana.
+      </div>
+      <input id="user_csv_file" type="file" accept=".csv,text/csv">
+    </div>
+  </div>
+
+  <div class="user-create-actions">
+    <button type="button" class="btn-secondary" onclick="loadUsersFromCsv()">Carregar CSV</button>
+    <button type="button" class="btn-success" onclick="createUsersBulk()">Criar usuarios</button>
+    <button type="button" class="btn-secondary" onclick="clearUserCreateForm()">Limpar</button>
+  </div>
+
+  <div id="userCreateStatus" class="status">Aguardando criacao de usuarios...</div>
+  <div id="userCreateResult" class="user-create-result hidden"></div>
+</div>
+
+
 <div id="selectionArea" class="grid-2 hidden">
       <div class="card">
         <div class="section-title">
@@ -666,6 +776,7 @@
       const selectionArea = document.getElementById("selectionArea");
       const executionArea = document.getElementById("executionArea");
     const orgCreateArea = document.getElementById("orgCreateArea");
+    const userCreateArea = document.getElementById("userCreateArea");
 
       status.className = "status";
       status.textContent = "Testando conexao com o Grafana...";
@@ -673,6 +784,7 @@
       selectionArea.classList.add("hidden");
       executionArea.classList.add("hidden");
     if (orgCreateArea) orgCreateArea.classList.add("hidden");
+    if (userCreateArea) userCreateArea.classList.add("hidden");
 
       try {
         const response = await fetch("/api/test-connection", {
@@ -703,6 +815,7 @@
         selectionArea.classList.remove("hidden");
         executionArea.classList.remove("hidden");
     if (orgCreateArea) orgCreateArea.classList.remove("hidden");
+    if (userCreateArea) userCreateArea.classList.remove("hidden");
 
       } catch (error) {
         status.className = "status error";
@@ -1402,7 +1515,238 @@ function renderLogs(logs) {
 
       logsArea.innerHTML = html;
     }
-  </script>
+  
+  function splitCsvLine(line) {
+    const result = [];
+    let current = "";
+    let insideQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const next = line[i + 1];
+
+      if (char === '"' && next === '"') {
+        current += '"';
+        i++;
+        continue;
+      }
+
+      if (char === '"') {
+        insideQuotes = !insideQuotes;
+        continue;
+      }
+
+      if (!insideQuotes && (char === "," || char === ";" || char === "\t")) {
+        result.push(current.trim());
+        current = "";
+        continue;
+      }
+
+      current += char;
+    }
+
+    result.push(current.trim());
+    return result;
+  }
+
+  function normalizeHeaderName(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function parseUsersCsvText(text) {
+    const lines = String(text || "")
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    if (!lines.length) {
+      return [];
+    }
+
+    const rawHeaders = splitCsvLine(lines[0]);
+    const normalizedHeaders = rawHeaders.map(normalizeHeaderName);
+
+    const aliases = {
+      usuario: ["usuario", "user", "login"],
+      email: ["email", "e-mail", "mail"],
+      nome: ["nome", "name", "nome completo"],
+      senha: ["senha", "password"],
+      role: ["role", "permissao", "nivel", "perfil"],
+      organizacao: ["organizacao", "organization", "org", "empresa", "cliente"]
+    };
+
+    const headerMap = {};
+
+    Object.entries(aliases).forEach(([field, names]) => {
+      const index = normalizedHeaders.findIndex(header => names.includes(header));
+      if (index >= 0) {
+        headerMap[field] = index;
+      }
+    });
+
+    const hasHeader = headerMap.usuario !== undefined ||
+      headerMap.email !== undefined ||
+      headerMap.nome !== undefined ||
+      headerMap.senha !== undefined ||
+      headerMap.role !== undefined ||
+      headerMap.organizacao !== undefined;
+
+    if (!hasHeader) {
+      throw new Error("CSV sem cabecalho reconhecido. Use: usuario,email,nome,senha,role,organizacao");
+    }
+
+    const users = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = splitCsvLine(lines[i]);
+
+      const user = {
+        usuario: headerMap.usuario !== undefined ? cols[headerMap.usuario] || "" : "",
+        email: headerMap.email !== undefined ? cols[headerMap.email] || "" : "",
+        nome: headerMap.nome !== undefined ? cols[headerMap.nome] || "" : "",
+        senha: headerMap.senha !== undefined ? cols[headerMap.senha] || "" : "",
+        role: headerMap.role !== undefined ? cols[headerMap.role] || "" : "",
+        organizacao: headerMap.organizacao !== undefined ? cols[headerMap.organizacao] || "" : ""
+      };
+
+      if (Object.values(user).some(Boolean)) {
+        users.push(user);
+      }
+    }
+
+    return users;
+  }
+
+  async function loadUsersFromCsv() {
+    const fileInput = document.getElementById("user_csv_file");
+    const textarea = document.getElementById("bulk_user_csv");
+    const status = document.getElementById("userCreateStatus");
+
+    if (!fileInput || !fileInput.files || !fileInput.files.length) {
+      status.className = "status error";
+      status.textContent = "Selecione um arquivo CSV de usuarios.";
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const text = await file.text();
+
+    textarea.value = text;
+    status.className = "status ok";
+    status.textContent = "CSV carregado. Confira os dados antes de criar os usuarios.";
+  }
+
+  function clearUserCreateForm() {
+    const textarea = document.getElementById("bulk_user_csv");
+    const fileInput = document.getElementById("user_csv_file");
+    const status = document.getElementById("userCreateStatus");
+    const result = document.getElementById("userCreateResult");
+
+    if (textarea) textarea.value = "";
+    if (fileInput) fileInput.value = "";
+
+    if (status) {
+      status.className = "status";
+      status.textContent = "Aguardando criacao de usuarios...";
+    }
+
+    if (result) {
+      result.classList.add("hidden");
+      result.innerHTML = "";
+    }
+  }
+
+  function renderUserCreateResult(result) {
+    const area = document.getElementById("userCreateResult");
+
+    if (!area) return;
+
+    const rows = result.results || [];
+
+    if (!rows.length) {
+      area.classList.add("hidden");
+      area.innerHTML = "";
+      return;
+    }
+
+    let html = "";
+
+    rows.forEach(row => {
+      const cls = row.status === "ok" ? "ok" : "error";
+      const msg = row.status === "ok"
+        ? (row.messages || []).join(" ")
+        : (row.error || "Erro desconhecido.");
+
+      html += `
+        <div class="user-create-result-row ${cls}">
+          <strong>${escapeHtml(row.usuario || row.email || "usuario")}</strong>
+          <span> - ${escapeHtml(row.organizacao || "")}</span>
+          <span> - ${escapeHtml(row.role || "")}</span>
+          <div>${escapeHtml(msg)}</div>
+        </div>
+      `;
+    });
+
+    area.innerHTML = html;
+    area.classList.remove("hidden");
+  }
+
+  async function createUsersBulk() {
+    const status = document.getElementById("userCreateStatus");
+    const textarea = document.getElementById("bulk_user_csv");
+
+    try {
+      const users = parseUsersCsvText(textarea.value);
+
+      if (!users.length) {
+        status.className = "status error";
+        status.textContent = "Informe pelo menos um usuario para criar.";
+        return;
+      }
+
+      const confirmText = `Voce vai criar/vincular ${users.length} usuario(s) no Grafana. Deseja continuar?`;
+
+      if (!confirm(confirmText)) {
+        return;
+      }
+
+      status.className = "status";
+      status.textContent = "Criando usuarios e vinculando nas organizacoes...";
+
+      const response = await fetch("/api/create-users-bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          ...getConnectionPayload(),
+          users
+        })
+      });
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        status.className = "status error";
+      } else {
+        status.className = "status ok";
+      }
+
+      status.textContent = result.message || result.error || "Processamento finalizado.";
+      renderUserCreateResult(result);
+
+    } catch (error) {
+      status.className = "status error";
+      status.textContent = String(error.message || error);
+    }
+  }
+
+
+</script>
 
 
 

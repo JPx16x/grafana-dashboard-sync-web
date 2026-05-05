@@ -388,3 +388,229 @@ def create_orgs_bulk_api():
 
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/create-users-bulk", methods=["POST"])
+@login_required
+def create_users_bulk_api():
+    data = request.get_json() or {}
+
+    grafana_url = normalize_url(data.get("grafana_url", ""))
+    grafana_user = data.get("grafana_user", "").strip()
+    grafana_password = data.get("grafana_password", "")
+    users = data.get("users") or []
+
+    if not grafana_url:
+        return jsonify({"ok": False, "error": "Informe a URL do Grafana."}), 400
+
+    if not grafana_user or not grafana_password:
+        return jsonify({"ok": False, "error": "Informe usuario e senha do Grafana."}), 400
+
+    if not isinstance(users, list) or not users:
+        return jsonify({"ok": False, "error": "Informe pelo menos um usuario para criar."}), 400
+
+    allowed_roles = {
+        "admin": "Admin",
+        "editor": "Editor",
+        "viewer": "Viewer",
+    }
+
+    results = []
+    success_count = 0
+    error_count = 0
+
+    try:
+        session_grafana = grafana_session(grafana_user, grafana_password)
+
+        orgs_response = session_grafana.get(
+            f"{grafana_url}/api/orgs",
+            timeout=30,
+        )
+
+        if orgs_response.status_code != 200:
+            return jsonify({
+                "ok": False,
+                "error": f"Falha ao listar organizacoes. HTTP {orgs_response.status_code}: {orgs_response.text}",
+            }), orgs_response.status_code
+
+        orgs = orgs_response.json() or []
+        org_map = {
+            str(org.get("name", "")).strip().lower(): org
+            for org in orgs
+            if org.get("name")
+        }
+
+        for index, item in enumerate(users, start=1):
+            login = str(item.get("usuario") or item.get("login") or item.get("user") or "").strip()
+            email = str(item.get("email") or "").strip()
+            name = str(item.get("nome") or item.get("name") or login or email).strip()
+            password = str(item.get("senha") or item.get("password") or "").strip()
+            role_raw = str(item.get("role") or item.get("permissao") or item.get("permissao") or "").strip()
+            org_name = str(item.get("organizacao") or item.get("organization") or item.get("org") or "").strip()
+
+            row_result = {
+                "line": index,
+                "usuario": login,
+                "email": email,
+                "nome": name,
+                "role": role_raw,
+                "organizacao": org_name,
+                "status": "ok",
+                "messages": [],
+            }
+
+            try:
+                if not login and email:
+                    login = email
+                    row_result["usuario"] = login
+
+                if not email and login:
+                    email = login
+                    row_result["email"] = email
+
+                if not login:
+                    raise RuntimeError("Usuario/login nao informado.")
+
+                if not email:
+                    raise RuntimeError("Email nao informado.")
+
+                if not password:
+                    raise RuntimeError("Senha nao informada.")
+
+                if not role_raw:
+                    raise RuntimeError("Permissao nao informada. Use Admin, Editor ou Viewer.")
+
+                role = allowed_roles.get(role_raw.lower())
+
+                if not role:
+                    raise RuntimeError("Permissao invalida. Use Admin, Editor ou Viewer.")
+
+                row_result["role"] = role
+
+                if not org_name:
+                    raise RuntimeError("Organizacao nao informada.")
+
+                target_org = org_map.get(org_name.lower())
+
+                if not target_org:
+                    raise RuntimeError(f"Organizacao '{org_name}' nao encontrada no Grafana.")
+
+                target_org_id = target_org.get("id")
+
+                if not target_org_id:
+                    raise RuntimeError(f"Organizacao '{org_name}' sem ID valido.")
+
+                user_lookup = None
+
+                lookup_response = session_grafana.get(
+                    f"{grafana_url}/api/users/lookup",
+                    params={"loginOrEmail": login},
+                    timeout=30,
+                )
+
+                if lookup_response.status_code == 200:
+                    user_lookup = lookup_response.json()
+                    row_result["messages"].append("Usuario ja existe.")
+                elif lookup_response.status_code == 404:
+                    create_response = session_grafana.post(
+                        f"{grafana_url}/api/admin/users",
+                        json={
+                            "name": name,
+                            "email": email,
+                            "login": login,
+                            "password": password,
+                        },
+                        timeout=30,
+                    )
+
+                    if create_response.status_code not in (200, 201):
+                        raise RuntimeError(
+                            f"Falha ao criar usuario. HTTP {create_response.status_code}: {create_response.text}"
+                        )
+
+                    user_lookup = create_response.json() if create_response.text else {}
+                    row_result["messages"].append("Usuario criado.")
+                else:
+                    raise RuntimeError(
+                        f"Falha ao consultar usuario. HTTP {lookup_response.status_code}: {lookup_response.text}"
+                    )
+
+                add_response = session_grafana.post(
+                    f"{grafana_url}/api/orgs/{target_org_id}/users",
+                    json={
+                        "loginOrEmail": login,
+                        "role": role,
+                    },
+                    timeout=30,
+                )
+
+                if add_response.status_code in (200, 201):
+                    row_result["messages"].append(f"Usuario vinculado na organizacao como {role}.")
+                elif add_response.status_code in (400, 409, 412):
+                    users_response = session_grafana.get(
+                        f"{grafana_url}/api/orgs/{target_org_id}/users",
+                        timeout=30,
+                    )
+
+                    if users_response.status_code != 200:
+                        raise RuntimeError(
+                            f"Usuario pode ja existir na org, mas falhou ao listar usuarios da org. HTTP {users_response.status_code}: {users_response.text}"
+                        )
+
+                    org_users = users_response.json() or []
+                    matched_user = None
+
+                    for org_user in org_users:
+                        org_login = str(org_user.get("login") or "").lower()
+                        org_email = str(org_user.get("email") or "").lower()
+
+                        if org_login == login.lower() or org_email == email.lower():
+                            matched_user = org_user
+                            break
+
+                    if not matched_user:
+                        raise RuntimeError(
+                            f"Falha ao vincular usuario na organizacao. HTTP {add_response.status_code}: {add_response.text}"
+                        )
+
+                    user_id = matched_user.get("userId") or matched_user.get("id")
+
+                    if not user_id:
+                        raise RuntimeError("Usuario encontrado na org, mas sem userId para atualizar permissao.")
+
+                    patch_response = session_grafana.patch(
+                        f"{grafana_url}/api/orgs/{target_org_id}/users/{user_id}",
+                        json={"role": role},
+                        timeout=30,
+                    )
+
+                    if patch_response.status_code not in (200, 201):
+                        raise RuntimeError(
+                            f"Falha ao atualizar permissao. HTTP {patch_response.status_code}: {patch_response.text}"
+                        )
+
+                    row_result["messages"].append(f"Usuario ja estava na organizacao. Permissao ajustada para {role}.")
+                else:
+                    raise RuntimeError(
+                        f"Falha ao vincular usuario na organizacao. HTTP {add_response.status_code}: {add_response.text}"
+                    )
+
+                success_count += 1
+
+            except Exception as exc:
+                error_count += 1
+                row_result["status"] = "error"
+                row_result["error"] = str(exc)
+
+            results.append(row_result)
+
+        return jsonify({
+            "ok": error_count == 0,
+            "message": f"Processamento finalizado. Sucesso: {success_count}. Erros: {error_count}.",
+            "success": success_count,
+            "errors": error_count,
+            "results": results,
+        })
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
