@@ -380,7 +380,82 @@
         width: 100%;
       }
     }
-  </style>
+  
+<style>
+/* Area de criacao de organizacoes */
+.org-create-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.org-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.org-create-bulk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  align-items: start;
+}
+
+.org-create-bulk textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.org-create-file {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(7, 11, 18, 0.45);
+}
+
+.org-create-file input[type="file"] {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.org-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.org-create-result {
+  margin-top: 12px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.org-result-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 13px;
+}
+
+.org-result-item.ok {
+  color: #22c55e;
+}
+
+.org-result-item.error {
+  color: #ff5f5f;
+}
+
+@media (max-width: 900px) {
+  .org-create-row,
+  .org-create-bulk {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+</style>
 </head>
 <body>
   <div class="container">
@@ -459,7 +534,54 @@
       <div id="sourceStatus" class="status">Aguardando selecao da organizacao origem...</div>
     </div>
 
-    <div id="selectionArea" class="grid-2 hidden">
+    
+<div id="orgCreateArea" class="card">
+  <div class="section-title">
+    <div>
+      <h2>Criar organizacoes</h2>
+      <div class="mini-text">Crie uma organizacao individualmente ou importe uma lista em lote.</div>
+    </div>
+    <span class="badge">Opcional</span>
+  </div>
+
+  <div class="org-create-grid">
+    <div>
+      <label>Criar uma organizacao</label>
+      <div class="org-create-row">
+        <input id="new_org_name" type="text" placeholder="Exemplo: CLIENTE NOVO">
+        <button type="button" class="btn-secondary" onclick="createSingleOrg()">Criar organizacao</button>
+      </div>
+    </div>
+
+    <div>
+      <label>Criar organizacoes em lote</label>
+      <div class="org-create-bulk">
+        <div>
+          <textarea id="bulk_org_names" placeholder="Informe uma organizacao por linha.&#10;Exemplo:&#10;CLIENTE A&#10;CLIENTE B&#10;CLIENTE C"></textarea>
+          <div class="mini-text">Tambem aceita lista separada por ponto e virgula ou virgula.</div>
+        </div>
+
+        <div class="org-create-file">
+          <strong>Importar CSV</strong>
+          <div class="mini-text">Use um CSV com uma coluna chamada name, nome ou organizacao. Se nao tiver cabecalho, a primeira coluna sera usada.</div>
+          <input id="org_csv_file" type="file" accept=".csv,text/csv">
+        </div>
+      </div>
+
+      <div class="org-create-actions" style="margin-top: 12px;">
+        <button type="button" class="btn-secondary" onclick="loadOrgsFromCsv()">Carregar CSV</button>
+        <button type="button" class="btn-success" onclick="createBulkOrgs()">Criar organizacoes</button>
+        <button type="button" class="btn-secondary" onclick="clearOrgCreateForm()">Limpar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="orgCreateStatus" class="status">Aguardando criacao de organizacoes...</div>
+  <div id="orgCreateResult" class="org-create-result hidden"></div>
+</div>
+
+
+<div id="selectionArea" class="grid-2 hidden">
       <div class="card">
         <div class="section-title">
           <h2>Dashboards da origem</h2>
@@ -543,12 +665,14 @@
       const syncConfig = document.getElementById("syncConfig");
       const selectionArea = document.getElementById("selectionArea");
       const executionArea = document.getElementById("executionArea");
+    const orgCreateArea = document.getElementById("orgCreateArea");
 
       status.className = "status";
       status.textContent = "Testando conexao com o Grafana...";
       syncConfig.classList.add("hidden");
       selectionArea.classList.add("hidden");
       executionArea.classList.add("hidden");
+    if (orgCreateArea) orgCreateArea.classList.add("hidden");
 
       try {
         const response = await fetch("/api/test-connection", {
@@ -578,6 +702,7 @@
         syncConfig.classList.remove("hidden");
         selectionArea.classList.remove("hidden");
         executionArea.classList.remove("hidden");
+    if (orgCreateArea) orgCreateArea.classList.remove("hidden");
 
       } catch (error) {
         status.className = "status error";
@@ -1019,7 +1144,235 @@
       `;
     }
 
-    function renderLogs(logs) {
+    
+function setOrgCreateStatus(message, type = "status") {
+  const status = document.getElementById("orgCreateStatus");
+  if (!status) return;
+  status.className = type;
+  status.textContent = message;
+}
+
+function renderOrgCreateResult(items) {
+  const area = document.getElementById("orgCreateResult");
+  if (!area) return;
+
+  if (!items || !items.length) {
+    area.classList.add("hidden");
+    area.innerHTML = "";
+    return;
+  }
+
+  area.classList.remove("hidden");
+  area.innerHTML = items.map(item => {
+    const ok = item.ok === true;
+    const name = item.name || item.org_name || item.organization || "-";
+    const msg = item.message || item.error || (ok ? "Criada com sucesso." : "Falha ao criar.");
+    return `<div class="org-result-item ${ok ? "ok" : "error"}">
+      <strong>${escapeHtml(name)}</strong> - ${escapeHtml(msg)}
+    </div>`;
+  }).join("");
+}
+
+function normalizeOrgNames(text) {
+  return String(text || "")
+    .split(/[\n;,]+/)
+    .map(v => v.trim())
+    .filter(Boolean)
+    .filter((v, idx, arr) => arr.indexOf(v) === idx);
+}
+
+async function refreshAfterOrgCreate() {
+  await testConnection();
+}
+
+async function createSingleOrg() {
+  const input = document.getElementById("new_org_name");
+  const orgName = input ? input.value.trim() : "";
+
+  if (!orgName) {
+    setOrgCreateStatus("Informe o nome da organizacao.", "status error");
+    return;
+  }
+
+  setOrgCreateStatus("Criando organizacao...", "status");
+  renderOrgCreateResult([]);
+
+  try {
+    const response = await fetch("/api/create-org", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        ...getConnectionPayload(),
+        org_name: orgName
+      })
+    });
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      setOrgCreateStatus(result.error || "Falha ao criar organizacao.", "status error");
+      renderOrgCreateResult([{ ok: false, name: orgName, error: result.error || "Falha ao criar organizacao." }]);
+      return;
+    }
+
+    setOrgCreateStatus(result.message || "Organizacao criada com sucesso.", "status ok");
+    renderOrgCreateResult([{ ok: true, name: orgName, message: result.message || "Criada com sucesso." }]);
+
+    if (input) input.value = "";
+    await refreshAfterOrgCreate();
+  } catch (error) {
+    setOrgCreateStatus("Erro inesperado: " + error, "status error");
+    renderOrgCreateResult([{ ok: false, name: orgName, error: String(error) }]);
+  }
+}
+
+function parseCsvLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      i++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current.trim());
+  return result;
+}
+
+function extractOrgNamesFromCsv(csvText) {
+  const lines = String(csvText || "")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) return [];
+
+  const first = parseCsvLine(lines[0]).map(v => v.toLowerCase().trim());
+  const possibleHeaders = ["name", "nome", "organizacao", "organização", "org", "organization"];
+
+  let nameIndex = first.findIndex(col => possibleHeaders.includes(col));
+  let startIndex = 0;
+
+  if (nameIndex >= 0) {
+    startIndex = 1;
+  } else {
+    nameIndex = 0;
+  }
+
+  const names = [];
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    const value = (cols[nameIndex] || "").trim();
+    if (value) names.push(value);
+  }
+
+  return names.filter((v, idx, arr) => arr.indexOf(v) === idx);
+}
+
+async function loadOrgsFromCsv() {
+  const fileInput = document.getElementById("org_csv_file");
+  const textarea = document.getElementById("bulk_org_names");
+
+  if (!fileInput || !fileInput.files || !fileInput.files.length) {
+    setOrgCreateStatus("Selecione um arquivo CSV.", "status error");
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const text = await file.text();
+  const names = extractOrgNamesFromCsv(text);
+
+  if (!names.length) {
+    setOrgCreateStatus("Nenhuma organizacao encontrada no CSV.", "status error");
+    return;
+  }
+
+  textarea.value = names.join("\n");
+  setOrgCreateStatus(`${names.length} organizacao(oes) carregada(s) do CSV.`, "status ok");
+}
+
+async function createBulkOrgs() {
+  const textarea = document.getElementById("bulk_org_names");
+  const orgNames = normalizeOrgNames(textarea ? textarea.value : "");
+
+  if (!orgNames.length) {
+    setOrgCreateStatus("Informe pelo menos uma organizacao para criar.", "status error");
+    return;
+  }
+
+  const confirmText = `Voce vai criar ${orgNames.length} organizacao(oes) no Grafana. Deseja continuar?`;
+  if (!confirm(confirmText)) {
+    return;
+  }
+
+  setOrgCreateStatus("Criando organizacoes em lote...", "status");
+  renderOrgCreateResult([]);
+
+  try {
+    const response = await fetch("/api/create-orgs-bulk", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        ...getConnectionPayload(),
+        org_names: orgNames
+      })
+    });
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      setOrgCreateStatus(result.error || "Falha ao criar organizacoes.", "status error");
+      renderOrgCreateResult(result.results || orgNames.map(name => ({ ok: false, name, error: result.error || "Falha ao criar." })));
+      return;
+    }
+
+    const results = result.results || [];
+    const okCount = results.filter(item => item.ok).length;
+    const errorCount = results.length - okCount;
+
+    setOrgCreateStatus(`Criacao em lote finalizada. Sucesso: ${okCount}. Erros: ${errorCount}.`, errorCount ? "status error" : "status ok");
+    renderOrgCreateResult(results);
+
+    await refreshAfterOrgCreate();
+  } catch (error) {
+    setOrgCreateStatus("Erro inesperado: " + error, "status error");
+    renderOrgCreateResult(orgNames.map(name => ({ ok: false, name, error: String(error) })));
+  }
+}
+
+function clearOrgCreateForm() {
+  const input = document.getElementById("new_org_name");
+  const textarea = document.getElementById("bulk_org_names");
+  const fileInput = document.getElementById("org_csv_file");
+
+  if (input) input.value = "";
+  if (textarea) textarea.value = "";
+  if (fileInput) fileInput.value = "";
+
+  setOrgCreateStatus("Aguardando criacao de organizacoes...", "status");
+  renderOrgCreateResult([]);
+}
+
+
+function renderLogs(logs) {
       const logsArea = document.getElementById("logsArea");
 
       if (!logs.length) {
@@ -1105,6 +1458,81 @@
       width: 96px;
     }
   }
+
+<style>
+/* Area de criacao de organizacoes */
+.org-create-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.org-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.org-create-bulk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  align-items: start;
+}
+
+.org-create-bulk textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.org-create-file {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(7, 11, 18, 0.45);
+}
+
+.org-create-file input[type="file"] {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.org-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.org-create-result {
+  margin-top: 12px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.org-result-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 13px;
+}
+
+.org-result-item.ok {
+  color: #22c55e;
+}
+
+.org-result-item.error {
+  color: #ff5f5f;
+}
+
+@media (max-width: 900px) {
+  .org-create-row,
+  .org-create-bulk {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
 </style>
 
 <script>
@@ -1226,6 +1654,81 @@
     grid-template-columns: 1fr !important;
   }
 }
+
+<style>
+/* Area de criacao de organizacoes */
+.org-create-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.org-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.org-create-bulk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  align-items: start;
+}
+
+.org-create-bulk textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.org-create-file {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(7, 11, 18, 0.45);
+}
+
+.org-create-file input[type="file"] {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.org-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.org-create-result {
+  margin-top: 12px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.org-result-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 13px;
+}
+
+.org-result-item.ok {
+  color: #22c55e;
+}
+
+.org-result-item.error {
+  color: #ff5f5f;
+}
+
+@media (max-width: 900px) {
+  .org-create-row,
+  .org-create-bulk {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
 </style>
 
 <style>
@@ -1262,6 +1765,81 @@
     grid-template-columns: 1fr !important;
   }
 }
+
+<style>
+/* Area de criacao de organizacoes */
+.org-create-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.org-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.org-create-bulk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  align-items: start;
+}
+
+.org-create-bulk textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.org-create-file {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(7, 11, 18, 0.45);
+}
+
+.org-create-file input[type="file"] {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.org-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.org-create-result {
+  margin-top: 12px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.org-result-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 13px;
+}
+
+.org-result-item.ok {
+  color: #22c55e;
+}
+
+.org-result-item.error {
+  color: #ff5f5f;
+}
+
+@media (max-width: 900px) {
+  .org-create-row,
+  .org-create-bulk {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
 </style>
 
 <style>
@@ -1319,4 +1897,79 @@
     max-width: 150px !important;
   }
 }
+
+<style>
+/* Area de criacao de organizacoes */
+.org-create-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.org-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.org-create-bulk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  align-items: start;
+}
+
+.org-create-bulk textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.org-create-file {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(7, 11, 18, 0.45);
+}
+
+.org-create-file input[type="file"] {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.org-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.org-create-result {
+  margin-top: 12px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.org-result-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 13px;
+}
+
+.org-result-item.ok {
+  color: #22c55e;
+}
+
+.org-result-item.error {
+  color: #ff5f5f;
+}
+
+@media (max-width: 900px) {
+  .org-create-row,
+  .org-create-bulk {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
 </style>

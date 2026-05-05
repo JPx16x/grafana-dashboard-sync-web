@@ -234,3 +234,157 @@ def run_sync_api():
 if __name__ == "__main__":
     port = int(os.environ.get("APP_PORT", "8080"))
     app.run(host="0.0.0.0", port=port, debug=True)
+
+
+@app.route("/api/create-org", methods=["POST"])
+@login_required
+def create_org_api():
+    data = request.get_json() or {}
+
+    grafana_url = normalize_url(data.get("grafana_url", ""))
+    grafana_user = data.get("grafana_user", "").strip()
+    grafana_password = data.get("grafana_password", "")
+    org_name = data.get("org_name", "").strip()
+
+    if not grafana_url:
+        return jsonify({"ok": False, "error": "Informe a URL do Grafana."}), 400
+
+    if not grafana_user or not grafana_password:
+        return jsonify({"ok": False, "error": "Informe usuario e senha do Grafana."}), 400
+
+    if not org_name:
+        return jsonify({"ok": False, "error": "Informe o nome da organizacao."}), 400
+
+    try:
+        session_grafana = grafana_session(grafana_user, grafana_password)
+
+        response = session_grafana.post(
+            f"{grafana_url}/api/orgs",
+            json={"name": org_name},
+            timeout=30,
+        )
+
+        if response.status_code in (200, 201):
+            payload = response.json() if response.text else {}
+            return jsonify({
+                "ok": True,
+                "message": f"Organizacao '{org_name}' criada com sucesso.",
+                "org": payload,
+            })
+
+        if response.status_code == 409:
+            return jsonify({
+                "ok": False,
+                "error": f"Organizacao '{org_name}' ja existe.",
+            }), 409
+
+        return jsonify({
+            "ok": False,
+            "error": f"Falha ao criar organizacao. HTTP {response.status_code}: {response.text}",
+        }), response.status_code
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/create-orgs-bulk", methods=["POST"])
+@login_required
+def create_orgs_bulk_api():
+    data = request.get_json() or {}
+
+    grafana_url = normalize_url(data.get("grafana_url", ""))
+    grafana_user = data.get("grafana_user", "").strip()
+    grafana_password = data.get("grafana_password", "")
+    org_names = data.get("org_names", [])
+
+    if not grafana_url:
+        return jsonify({"ok": False, "error": "Informe a URL do Grafana."}), 400
+
+    if not grafana_user or not grafana_password:
+        return jsonify({"ok": False, "error": "Informe usuario e senha do Grafana."}), 400
+
+    if not isinstance(org_names, list):
+        return jsonify({"ok": False, "error": "A lista de organizacoes esta invalida."}), 400
+
+    clean_names = []
+    seen = set()
+
+    for name in org_names:
+        clean_name = str(name).strip()
+        if not clean_name:
+            continue
+
+        key = clean_name.lower()
+        if key in seen:
+            continue
+
+        seen.add(key)
+        clean_names.append(clean_name)
+
+    if not clean_names:
+        return jsonify({"ok": False, "error": "Nenhuma organizacao valida informada."}), 400
+
+    results = []
+    created = 0
+    already_exists = 0
+    errors = 0
+
+    try:
+        session_grafana = grafana_session(grafana_user, grafana_password)
+
+        for org_name in clean_names:
+            try:
+                response = session_grafana.post(
+                    f"{grafana_url}/api/orgs",
+                    json={"name": org_name},
+                    timeout=30,
+                )
+
+                if response.status_code in (200, 201):
+                    created += 1
+                    payload = response.json() if response.text else {}
+                    results.append({
+                        "name": org_name,
+                        "status": "created",
+                        "message": "Criada com sucesso.",
+                        "org": payload,
+                    })
+                    continue
+
+                if response.status_code == 409:
+                    already_exists += 1
+                    results.append({
+                        "name": org_name,
+                        "status": "exists",
+                        "message": "Organizacao ja existe.",
+                    })
+                    continue
+
+                errors += 1
+                results.append({
+                    "name": org_name,
+                    "status": "error",
+                    "message": f"HTTP {response.status_code}: {response.text}",
+                })
+
+            except Exception as item_exc:
+                errors += 1
+                results.append({
+                    "name": org_name,
+                    "status": "error",
+                    "message": str(item_exc),
+                })
+
+        return jsonify({
+            "ok": errors == 0,
+            "summary": {
+                "total": len(clean_names),
+                "created": created,
+                "already_exists": already_exists,
+                "errors": errors,
+            },
+            "results": results,
+        })
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
