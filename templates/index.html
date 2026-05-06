@@ -630,6 +630,50 @@
   100% { transform: translateX(220%); }
 }
 
+
+/* Filtros de pesquisa das tabelas */
+.table-search-top {
+  width: 100%;
+  margin: 0 0 14px 0;
+}
+
+.table-search-wrap {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 100%;
+  flex: 1 1 100%;
+  max-width: 100%;
+}
+
+.table-search-input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(3, 7, 18, 0.65);
+  color: var(--text);
+  padding: 0 14px;
+  outline: none;
+  font-size: 14px;
+}
+
+.table-search-input::placeholder {
+  color: var(--muted);
+}
+
+.table-search-input:focus {
+  border-color: rgba(56, 189, 248, 0.75);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+@media (max-width: 900px) {
+  .table-search-wrap {
+    min-width: 100%;
+    max-width: 100%;
+  }
+}
+
 </style>
 
 </style>
@@ -2197,6 +2241,160 @@ function renderLogs(logs) {
       throw error;
     }
   };
+})();
+</script>
+
+
+<script>
+/* Filtros de pesquisa para dashboards e organizacoes */
+(function () {
+  function normalizeText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  }
+
+  function findCardByTitle(titleText) {
+    const expected = normalizeText(titleText);
+
+    return Array.from(document.querySelectorAll(".card")).find((card) => {
+      const h2 = card.querySelector("h2");
+      return h2 && normalizeText(h2.textContent) === expected;
+    });
+  }
+
+  function createSearchInput(id, placeholder, onInput) {
+    let wrap = document.getElementById(id + "_wrap");
+
+    if (wrap) {
+      return;
+    }
+
+    wrap = document.createElement("div");
+    wrap.id = id + "_wrap";
+    wrap.className = "table-search-wrap";
+
+    const input = document.createElement("input");
+    input.id = id;
+    input.type = "text";
+    input.className = "table-search-input";
+    input.placeholder = placeholder;
+    input.autocomplete = "off";
+
+    input.addEventListener("input", onInput);
+
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function filterRows(inputId, areaId) {
+    const input = document.getElementById(inputId);
+    const area = document.getElementById(areaId);
+
+    if (!input || !area) {
+      return;
+    }
+
+    const term = normalizeText(input.value);
+    const rows = area.querySelectorAll("tbody tr");
+
+    rows.forEach((row) => {
+      const text = normalizeText(row.textContent);
+      row.style.display = !term || text.includes(term) ? "" : "none";
+    });
+  }
+
+  function filterDashboards() {
+    filterRows("dashboardSearchInput", "dashboardsArea");
+  }
+
+  function filterTargetOrgs() {
+    filterRows("targetOrgSearchInput", "targetOrgsArea");
+  }
+
+  function setupFilters() {
+    const dashboardCard = findCardByTitle("Dashboards da origem");
+    const targetCard = findCardByTitle("Organizacoes destino") || findCardByTitle("Organizações destino");
+
+    if (dashboardCard) {
+      const actions = dashboardCard.querySelector(".actions");
+      if (actions) {
+        let searchTop = dashboardCard.querySelector(".table-search-top.dashboard-search-top");
+        if (!searchTop) {
+          searchTop = document.createElement("div");
+          searchTop.className = "table-search-top dashboard-search-top";
+          actions.parentNode.insertBefore(searchTop, actions);
+        }
+
+        if (!document.getElementById("dashboardSearchInput")) {
+          const inputWrap = createSearchInput(
+            "dashboardSearchInput",
+            "Pesquisar dashboard...",
+            filterDashboards
+          );
+          if (inputWrap) {
+            searchTop.appendChild(inputWrap);
+          }
+        }
+      }
+    }
+
+    if (targetCard) {
+      const actions = targetCard.querySelector(".actions");
+      if (actions) {
+        let searchTop = targetCard.querySelector(".table-search-top.target-org-search-top");
+        if (!searchTop) {
+          searchTop = document.createElement("div");
+          searchTop.className = "table-search-top target-org-search-top";
+          actions.parentNode.insertBefore(searchTop, actions);
+        }
+
+        if (!document.getElementById("targetOrgSearchInput")) {
+          const inputWrap = createSearchInput(
+            "targetOrgSearchInput",
+            "Pesquisar organizacao...",
+            filterTargetOrgs
+          );
+          if (inputWrap) {
+            searchTop.appendChild(inputWrap);
+          }
+        }
+      }
+    }
+
+    const dashboardsArea = document.getElementById("dashboardsArea");
+    const targetOrgsArea = document.getElementById("targetOrgsArea");
+
+    if (dashboardsArea && !dashboardsArea.dataset.filterObserver) {
+      dashboardsArea.dataset.filterObserver = "1";
+      new MutationObserver(filterDashboards).observe(dashboardsArea, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    if (targetOrgsArea && !targetOrgsArea.dataset.filterObserver) {
+      targetOrgsArea.dataset.filterObserver = "1";
+      new MutationObserver(filterTargetOrgs).observe(targetOrgsArea, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    filterDashboards();
+    filterTargetOrgs();
+  }
+
+  document.addEventListener("DOMContentLoaded", setupFilters);
+  window.addEventListener("load", setupFilters);
+
+  const setupTimer = setInterval(setupFilters, 1000);
+
+  setTimeout(() => {
+    clearInterval(setupTimer);
+  }, 15000);
 })();
 </script>
 
