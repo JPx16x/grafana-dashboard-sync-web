@@ -524,6 +524,112 @@
   }
 }
 
+
+/* FLOWBIX_SAFE_SYNC_PROGRESS_CSS */
+.sync-progress-safe {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border, #2f3b4f);
+  border-radius: 12px;
+  background: rgba(7, 11, 18, 0.55);
+}
+
+.sync-progress-safe.hidden {
+  display: none;
+}
+
+.sync-progress-safe-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sync-progress-safe-title {
+  font-weight: 700;
+  color: var(--text, #e5e7eb);
+}
+
+.sync-progress-safe-time {
+  color: #22c55e;
+  font-weight: 700;
+}
+
+.sync-progress-safe-bar {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.sync-progress-safe-fill {
+  height: 100%;
+  width: 38%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22c55e, #38bdf8);
+  transform: translateX(-120%);
+}
+
+.sync-progress-safe.running .sync-progress-safe-fill {
+  animation: flowbixSafeProgress 1.15s ease-in-out infinite;
+}
+
+.sync-progress-safe.finished .sync-progress-safe-fill {
+  width: 100%;
+  transform: translateX(0);
+  animation: none;
+}
+
+.sync-progress-safe.error .sync-progress-safe-fill {
+  width: 100%;
+  transform: translateX(0);
+  animation: none;
+  background: linear-gradient(90deg, #ef4444, #f97316);
+}
+
+.sync-progress-safe-meta {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sync-progress-safe-item {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.sync-progress-safe-label {
+  display: block;
+  color: var(--muted, #9ca3af);
+  font-size: 12px;
+}
+
+.sync-progress-safe-value {
+  display: block;
+  color: var(--text, #e5e7eb);
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.sync-progress-safe-message {
+  margin-top: 10px;
+  color: var(--muted, #9ca3af);
+  font-size: 13px;
+}
+
+@keyframes flowbixSafeProgress {
+  0% { transform: translateX(-120%); }
+  50% { transform: translateX(80%); }
+  100% { transform: translateX(220%); }
+}
+
 </style>
 
 </style>
@@ -738,6 +844,38 @@
       </div>
 
       <div id="executionStatus" class="status">Aguardando execucao...</div>
+
+<!-- FLOWBIX_SAFE_SYNC_PROGRESS_HTML -->
+<div id="syncProgressSafe" class="sync-progress-safe hidden">
+  <div class="sync-progress-safe-head">
+    <div class="sync-progress-safe-title" id="syncProgressSafeTitle">Sincronizacao em andamento</div>
+    <div class="sync-progress-safe-time" id="syncProgressSafeTime">0s</div>
+  </div>
+
+  <div class="sync-progress-safe-bar">
+    <div class="sync-progress-safe-fill"></div>
+  </div>
+
+  <div class="sync-progress-safe-meta">
+    <div class="sync-progress-safe-item">
+      <span class="sync-progress-safe-label">Modo</span>
+      <span class="sync-progress-safe-value" id="syncProgressSafeMode">-</span>
+    </div>
+    <div class="sync-progress-safe-item">
+      <span class="sync-progress-safe-label">Organizacoes selecionadas</span>
+      <span class="sync-progress-safe-value" id="syncProgressSafeOrgs">-</span>
+    </div>
+    <div class="sync-progress-safe-item">
+      <span class="sync-progress-safe-label">Status</span>
+      <span class="sync-progress-safe-value" id="syncProgressSafeState">Aguardando</span>
+    </div>
+  </div>
+
+  <div class="sync-progress-safe-message" id="syncProgressSafeMessage">
+    Aguardando inicio da sincronizacao.
+  </div>
+</div>
+
 
       <div id="summaryArea" class="hidden"></div>
 
@@ -1937,6 +2075,130 @@ function renderLogs(logs) {
 })();
 </script>
 <!-- FBX_LOGO_END -->
+
+
+<script>
+/* FLOWBIX_SAFE_SYNC_PROGRESS_JS */
+(function () {
+  if (window.__flowbixSafeSyncProgressInstalled) return;
+  window.__flowbixSafeSyncProgressInstalled = true;
+
+  const nativeFetch = window.fetch.bind(window);
+  let syncProgressTimer = null;
+  let syncProgressStartedAt = 0;
+
+  function getEl(id) {
+    return document.getElementById(id);
+  }
+
+  function isRunSyncRequest(input) {
+    const url = typeof input === "string" ? input : (input && input.url) || "";
+    return url.indexOf("/api/run-sync") !== -1;
+  }
+
+  function parsePayload(init) {
+    try {
+      if (!init || !init.body) return {};
+      return JSON.parse(init.body);
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function setText(id, value) {
+    const el = getEl(id);
+    if (el) el.textContent = value;
+  }
+
+  function getElapsedText() {
+    const elapsed = Math.floor((Date.now() - syncProgressStartedAt) / 1000);
+
+    if (elapsed < 60) {
+      return elapsed + "s";
+    }
+
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+
+    if (minutes < 60) {
+      return minutes + " min " + seconds + "s";
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    return hours + "h " + remainingMinutes + " min " + seconds + "s";
+  }
+
+  function startSyncProgress(payload) {
+    const box = getEl("syncProgressSafe");
+    if (!box) return;
+
+    const dryRun = payload && payload.dry_run === true;
+    const targetOrgs = Array.isArray(payload && payload.target_orgs) ? payload.target_orgs.length : 0;
+
+    syncProgressStartedAt = Date.now();
+
+    box.classList.remove("hidden", "finished", "error");
+    box.classList.add("running");
+
+    setText("syncProgressSafeTitle", dryRun ? "Dry-run em andamento" : "Sincronizacao real em andamento");
+    setText("syncProgressSafeMode", dryRun ? "Dry-run" : "Sincronizacao real");
+    setText("syncProgressSafeOrgs", targetOrgs ? String(targetOrgs) : "-");
+    setText("syncProgressSafeState", "Executando");
+    setText("syncProgressSafeMessage", "Aguardando resposta do backend. Nao feche a pagina durante a execucao.");
+    setText("syncProgressSafeTime", "0s");
+
+    if (syncProgressTimer) clearInterval(syncProgressTimer);
+
+    syncProgressTimer = setInterval(function () {
+      setText("syncProgressSafeTime", getElapsedText());
+    }, 500);
+  }
+
+  function finishSyncProgress(ok, message) {
+    const box = getEl("syncProgressSafe");
+    if (!box) return;
+
+    if (syncProgressTimer) {
+      clearInterval(syncProgressTimer);
+      syncProgressTimer = null;
+    }
+
+    setText("syncProgressSafeTime", getElapsedText());
+    setText("syncProgressSafeState", ok ? "Finalizado" : "Erro");
+    setText("syncProgressSafeMessage", message || (ok ? "Sincronizacao finalizada." : "Falha durante a sincronizacao."));
+
+    box.classList.remove("running");
+    box.classList.add(ok ? "finished" : "error");
+  }
+
+  window.fetch = async function (input, init) {
+    if (!isRunSyncRequest(input)) {
+      return nativeFetch(input, init);
+    }
+
+    const payload = parsePayload(init);
+    startSyncProgress(payload);
+
+    try {
+      const response = await nativeFetch(input, init);
+
+      if (response.ok) {
+        finishSyncProgress(true, "Resposta recebida do backend. Renderizando resultado na tela.");
+      } else {
+        finishSyncProgress(false, "Backend retornou erro HTTP " + response.status + ".");
+      }
+
+      return response;
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      finishSyncProgress(false, "Falha na comunicacao com o backend: " + message);
+      throw error;
+    }
+  };
+})();
+</script>
 
 </body>
 </html>
