@@ -524,162 +524,6 @@
   }
 }
 
-
-/* Sincronizacao em lotes */
-.batch-progress {
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(7, 11, 18, 0.55);
-}
-
-.batch-progress-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.batch-progress-head strong {
-  color: var(--text);
-  font-size: 14px;
-}
-
-.batch-progress-head span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.batch-progress-bar {
-  width: 100%;
-  height: 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.batch-progress-fill {
-  width: 0%;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #22c55e, #38bdf8);
-  transition: width 0.25s ease;
-}
-
-.batch-progress-detail {
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.batch-progress-actions {
-  margin-top: 12px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-
-/* Barra de progresso real por lotes */
-.sync-progress-box {
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(7, 11, 18, 0.55);
-}
-
-.sync-progress-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.sync-progress-title {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.sync-progress-percent {
-  font-weight: 800;
-  color: #22c55e;
-}
-
-.sync-progress-bar {
-  width: 100%;
-  height: 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.sync-progress-fill {
-  width: 0%;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #22c55e, #38bdf8);
-  transition: width 0.25s ease;
-}
-
-.sync-progress-meta {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.sync-progress-item {
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-
-.sync-progress-label {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.sync-progress-value {
-  display: block;
-  color: var(--text);
-  font-weight: 700;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sync-progress-msg {
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-#executionArea button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-@media (max-width: 900px) {
-  .sync-progress-meta {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (max-width: 520px) {
-  .sync-progress-meta {
-    grid-template-columns: 1fr;
-  }
-}
-
 </style>
 
 </style>
@@ -895,28 +739,6 @@
 
       <div id="executionStatus" class="status">Aguardando execucao...</div>
 
-      <div id="batchProgressArea" class="batch-progress hidden">
-        <div class="batch-progress-head">
-          <strong>Progresso da sincronizacao</strong>
-          <span id="batchProgressText">0/0 lotes</span>
-        </div>
-
-        <div class="batch-progress-bar">
-          <div id="batchProgressFill" class="batch-progress-fill"></div>
-        </div>
-
-        <div id="batchProgressDetail" class="batch-progress-detail">
-          Aguardando inicio da sincronizacao em lotes.
-        </div>
-
-        <div class="batch-progress-actions">
-          <button type="button" id="downloadSyncReportBtn" class="btn-secondary hidden" onclick="downloadSyncReport()">
-            Baixar relatorio final
-          </button>
-        </div>
-      </div>
-
-
       <div id="summaryArea" class="hidden"></div>
 
       <h3>Logs</h3>
@@ -927,152 +749,9 @@
   </div>
 
   <script>
-
-// Barra de progresso real por lotes
-const SYNC_DRY_RUN_BATCH_SIZE = 10;
-const SYNC_REAL_BATCH_SIZE = 1;
-const SYNC_BATCH_DELAY_MS_SAFE = 800;
-
-function sleepSyncProgress(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function splitSyncProgressBatches(items, size) {
-  const list = Array.isArray(items) ? items : [];
-  const batchSize = Math.max(1, Number(size) || 1);
-  const batches = [];
-
-  for (let i = 0; i < list.length; i += batchSize) {
-    batches.push(list.slice(i, i + batchSize));
-  }
-
-  return batches;
-}
-
-function getOrgDisplayName(org) {
-  if (org === null || org === undefined) return "";
-  if (typeof org === "string" || typeof org === "number") return String(org);
-  return org.name || org.org_name || org.title || (org.id ? `ID ${org.id}` : "");
-}
-
-function ensureSyncProgressBox() {
-  let box = document.getElementById("syncProgressBox");
-  if (box) return box;
-
-  const executionStatus = document.getElementById("executionStatus");
-
-  box = document.createElement("div");
-  box.id = "syncProgressBox";
-  box.className = "sync-progress-box hidden";
-  box.innerHTML = `
-    <div class="sync-progress-head">
-      <span class="sync-progress-title">Progresso da sincronizacao</span>
-      <span id="syncProgressPercent" class="sync-progress-percent">0%</span>
-    </div>
-
-    <div class="sync-progress-bar">
-      <div id="syncProgressFill" class="sync-progress-fill"></div>
-    </div>
-
-    <div class="sync-progress-meta">
-      <div class="sync-progress-item">
-        <span class="sync-progress-label">Modo</span>
-        <span id="syncProgressMode" class="sync-progress-value">-</span>
-      </div>
-
-      <div class="sync-progress-item">
-        <span class="sync-progress-label">Lote</span>
-        <span id="syncProgressBatch" class="sync-progress-value">-</span>
-      </div>
-
-      <div class="sync-progress-item">
-        <span class="sync-progress-label">Organizacoes</span>
-        <span id="syncProgressOrgs" class="sync-progress-value">-</span>
-      </div>
-
-      <div class="sync-progress-item">
-        <span class="sync-progress-label">Tempo</span>
-        <span id="syncProgressTime" class="sync-progress-value">0s</span>
-      </div>
-    </div>
-
-    <div id="syncProgressMessage" class="sync-progress-msg">Aguardando inicio...</div>
-  `;
-
-  if (executionStatus) {
-    executionStatus.insertAdjacentElement("afterend", box);
-  }
-
-  return box;
-}
-
-function updateSyncProgressView(state) {
-  const box = ensureSyncProgressBox();
-  box.classList.remove("hidden");
-
-  const percent = Math.max(0, Math.min(100, Number(state.percent || 0)));
-
-  const fill = document.getElementById("syncProgressFill");
-  const percentEl = document.getElementById("syncProgressPercent");
-  const modeEl = document.getElementById("syncProgressMode");
-  const batchEl = document.getElementById("syncProgressBatch");
-  const orgsEl = document.getElementById("syncProgressOrgs");
-  const timeEl = document.getElementById("syncProgressTime");
-  const msgEl = document.getElementById("syncProgressMessage");
-
-  if (fill) fill.style.width = `${percent}%`;
-  if (percentEl) percentEl.textContent = `${percent.toFixed(0)}%`;
-  if (modeEl) modeEl.textContent = state.mode || "-";
-  if (batchEl) batchEl.textContent = state.batchText || "-";
-  if (orgsEl) orgsEl.textContent = state.orgText || "-";
-  if (timeEl) timeEl.textContent = state.timeText || "0s";
-  if (msgEl) msgEl.textContent = state.message || "";
-}
-
-function setExecutionButtonsDisabled(disabled) {
-  const executionArea = document.getElementById("executionArea");
-  if (!executionArea) return;
-
-  executionArea.querySelectorAll("button").forEach(button => {
-    button.disabled = disabled;
-  });
-}
-
-function mergeSyncStats(base, result, fallbackOrgCount) {
-  const src = result && result.stats ? result.stats : {};
-
-  const keysToSum = [
-    "orgs_ok",
-    "dashboards_ok",
-    "errors",
-    "backups_ok",
-    "datasources_ok",
-    "datasources_error"
-  ];
-
-  keysToSum.forEach(key => {
-    base[key] = Number(base[key] || 0) + Number(src[key] || 0);
-  });
-
-  if (!Number(src.orgs_ok) && result && result.ok) {
-    base.orgs_ok = Number(base.orgs_ok || 0) + Number(fallbackOrgCount || 0);
-  }
-
-  return base;
-}
-
-function mergeSyncLogs(targetLogs, result) {
-  const logs = result && Array.isArray(result.logs) ? result.logs : [];
-  logs.forEach(line => targetLogs.push(line));
-}
-
-
     let loadedOrgs = [];
     let loadedDashboards = [];
     let loadedDatasources = [];
-let lastSyncResult = null;
-const SYNC_BATCH_SIZE = 10;
-const SYNC_REQUEST_TIMEOUT_MS = 120000;
 
     function getConnectionPayload() {
       return {
@@ -1469,421 +1148,66 @@ const SYNC_REQUEST_TIMEOUT_MS = 120000;
       return null;
     }
 
-    
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+    async function runSync(dryRun) {
+      const executionStatus = document.getElementById("executionStatus");
+      const logsArea = document.getElementById("logsArea");
+      const summaryArea = document.getElementById("summaryArea");
 
-function splitIntoBatches(items, size) {
-  const batches = [];
+      const payload = buildSyncPayload(dryRun);
+      const validationError = validateSyncPayload(payload);
 
-  for (let i = 0; i < items.length; i += size) {
-    batches.push(items.slice(i, i + size));
-  }
-
-  return batches;
-}
-
-function createEmptySyncResult(dryRun) {
-  return {
-    ok: true,
-    dry_run: dryRun,
-    started_at: new Date().toISOString(),
-    finished_at: null,
-    duration_seconds: 0,
-    status: {
-      orgs_total: 0,
-      orgs_ok: 0,
-      orgs_error: 0,
-      dashboards_ok: 0,
-      dashboards_error: 0,
-      backups_ok: 0,
-      datasources_ok: 0,
-      datasources_error: 0
-    },
-    orgs: [],
-    logs: [],
-    batches: []
-  };
-}
-
-function mergeSyncResult(total, batchResult, batchInfo) {
-  const statusKeys = [
-    "orgs_total",
-    "orgs_ok",
-    "orgs_error",
-    "dashboards_ok",
-    "dashboards_error",
-    "backups_ok",
-    "datasources_ok",
-    "datasources_error"
-  ];
-
-  const batchStatus = batchResult.status || {};
-
-  statusKeys.forEach(key => {
-    total.status[key] = Number(total.status[key] || 0) + Number(batchStatus[key] || 0);
-  });
-
-  if (Array.isArray(batchResult.orgs)) {
-    total.orgs.push(...batchResult.orgs);
-  }
-
-  if (Array.isArray(batchResult.logs)) {
-    total.logs.push(...batchResult.logs);
-  }
-
-  total.batches.push({
-    ...batchInfo,
-    ok: batchResult.ok !== false,
-    status: batchStatus,
-    error: batchResult.error || null
-  });
-
-  if (batchResult.ok === false) {
-    total.ok = false;
-  }
-
-  total.finished_at = new Date().toISOString();
-
-  const started = new Date(total.started_at).getTime();
-  total.duration_seconds = Math.round(((Date.now() - started) / 1000) * 100) / 100;
-
-  return total;
-}
-
-function createFailedBatchResult(batchTargets, errorMessage) {
-  const names = batchTargets.map(org => org.name || org.org_name || org.id || "org");
-
-  return {
-    ok: false,
-    error: errorMessage,
-    status: {
-      orgs_total: batchTargets.length,
-      orgs_ok: 0,
-      orgs_error: batchTargets.length,
-      dashboards_ok: 0,
-      dashboards_error: 0,
-      backups_ok: 0,
-      datasources_ok: 0,
-      datasources_error: 0
-    },
-    orgs: batchTargets.map(org => ({
-      id: org.id,
-      name: org.name || org.org_name || String(org.id || ""),
-      status: "error",
-      error: errorMessage,
-      dashboards: []
-    })),
-    logs: [{
-      time: new Date().toLocaleTimeString(),
-      level: "error",
-      message: `Falha no lote com as organizacoes: ${names.join(", ")}. Erro: ${errorMessage}`
-    }]
-  };
-}
-
-async function fetchJsonWithTimeout(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-
-    const text = await response.text();
-    let data = {};
-
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch (error) {
-      data = { ok: false, error: text || String(error) };
-    }
-
-    if (!response.ok) {
-      throw new Error(data.error || data.message || `HTTP ${response.status}: ${text}`);
-    }
-
-    return data;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function runBatchRequest(batchPayload, batchIndex, maxRetries) {
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await fetchJsonWithTimeout("/api/run-sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(batchPayload)
-      }, SYNC_REQUEST_TIMEOUT_MS);
-    } catch (error) {
-      lastError = error;
-
-      if (attempt < maxRetries) {
-        await sleep(2000);
+      if (validationError) {
+        executionStatus.className = "status error";
+        executionStatus.textContent = validationError;
+        return;
       }
-    }
-  }
 
-  throw lastError || new Error(`Falha no lote ${batchIndex}`);
-}
+      if (!dryRun) {
+        const confirmText = `Voce vai executar sincronizacao REAL em ${payload.target_orgs.length} organizacao(oes). Deseja continuar?`;
+        if (!confirm(confirmText)) {
+          return;
+        }
+      }
 
-function updateBatchProgress(currentBatch, totalBatches, detail) {
-  const area = document.getElementById("batchProgressArea");
-  const text = document.getElementById("batchProgressText");
-  const fill = document.getElementById("batchProgressFill");
-  const detailEl = document.getElementById("batchProgressDetail");
+      executionStatus.className = "status warning";
+      executionStatus.textContent = dryRun
+        ? "Executando dry-run..."
+        : "Executando sincronizacao real...";
 
-  if (!area || !text || !fill || !detailEl) {
-    return;
-  }
-
-  area.classList.remove("hidden");
-
-  const percent = totalBatches > 0
-    ? Math.round((currentBatch / totalBatches) * 100)
-    : 0;
-
-  text.textContent = `${currentBatch}/${totalBatches} lotes - ${percent}%`;
-  fill.style.width = `${percent}%`;
-  detailEl.textContent = detail || "";
-}
-
-function resetBatchProgress() {
-  const area = document.getElementById("batchProgressArea");
-  const text = document.getElementById("batchProgressText");
-  const fill = document.getElementById("batchProgressFill");
-  const detailEl = document.getElementById("batchProgressDetail");
-  const downloadBtn = document.getElementById("downloadSyncReportBtn");
-
-  if (area) area.classList.remove("hidden");
-  if (text) text.textContent = "0/0 lotes";
-  if (fill) fill.style.width = "0%";
-  if (detailEl) detailEl.textContent = "Preparando lotes...";
-  if (downloadBtn) downloadBtn.classList.add("hidden");
-}
-
-function showDownloadReportButton() {
-  const downloadBtn = document.getElementById("downloadSyncReportBtn");
-  if (downloadBtn) {
-    downloadBtn.classList.remove("hidden");
-  }
-}
-
-function downloadSyncReport() {
-  if (!lastSyncResult) {
-    alert("Nenhum relatorio disponivel.");
-    return;
-  }
-
-  const blob = new Blob(
-    [JSON.stringify(lastSyncResult, null, 2)],
-    { type: "application/json;charset=utf-8" }
-  );
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  const stamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
-
-  link.href = url;
-  link.download = `sync_report_${stamp}.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-
-  URL.revokeObjectURL(url);
-}
-
-async function runSync(dryRun) {
-  const executionStatus = document.getElementById("executionStatus");
-  const summaryArea = document.getElementById("summaryArea");
-  const logsArea = document.getElementById("logsArea");
-
-  const payload = buildSyncPayload(dryRun);
-
-  if (typeof validateSyncPayload === "function") {
-    if (!validateSyncPayload(payload)) return;
-  }
-
-  const allTargets = Array.isArray(payload.target_orgs) ? payload.target_orgs : [];
-
-  if (!allTargets.length) {
-    executionStatus.className = "status error";
-    executionStatus.textContent = "Selecione pelo menos uma organizacao destino.";
-    return;
-  }
-
-  const batchSize = dryRun ? SYNC_DRY_RUN_BATCH_SIZE : SYNC_REAL_BATCH_SIZE;
-  const batches = splitSyncProgressBatches(allTargets, batchSize);
-  const modeText = dryRun ? "Dry-run" : "Sincronizacao real";
-
-  if (!dryRun) {
-    const confirmText = `Voce vai executar sincronizacao REAL em ${allTargets.length} organizacao(es), divididas em ${batches.length} lote(s) de ate ${batchSize}. Deseja continuar?`;
-    if (!confirm(confirmText)) return;
-  }
-
-  const startedAt = Date.now();
-
-  const aggregate = {
-    ok: true,
-    message: `${modeText} em andamento...`,
-    stats: {
-      orgs_total: allTargets.length,
-      orgs_ok: 0,
-      dashboards_ok: 0,
-      errors: 0,
-      backups_ok: 0,
-      datasources_ok: 0,
-      datasources_error: 0,
-      elapsed_seconds: 0
-    },
-    logs: []
-  };
-
-  executionStatus.className = "status";
-  executionStatus.textContent = `${modeText} em andamento. Processando ${allTargets.length} organizacao(es)...`;
-
-  if (summaryArea) summaryArea.classList.add("hidden");
-  if (logsArea) logsArea.textContent = "Iniciando execucao em lotes...";
-
-  setExecutionButtonsDisabled(true);
-
-  updateSyncProgressView({
-    percent: 0,
-    mode: modeText,
-    batchText: `0 / ${batches.length}`,
-    orgText: `0 / ${allTargets.length}`,
-    timeText: "0s",
-    message: "Preparando sincronizacao..."
-  });
-
-  try {
-    let processedOrgs = 0;
-
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      const batchNumber = i + 1;
-      const orgNames = batch.map(getOrgDisplayName).filter(Boolean).join(", ");
-
-      updateSyncProgressView({
-        percent: (processedOrgs / allTargets.length) * 100,
-        mode: modeText,
-        batchText: `${batchNumber} / ${batches.length}`,
-        orgText: `${processedOrgs} / ${allTargets.length}`,
-        timeText: `${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
-        message: `Processando: ${orgNames || "organizacao destino"}`
-      });
-
-      const batchPayload = {
-        ...payload,
-        target_orgs: batch
-      };
-
-      const response = await fetch("/api/run-sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(batchPayload)
-      });
-
-      let result = {};
+      logsArea.innerHTML = "Executando...";
+      summaryArea.classList.add("hidden");
+      summaryArea.innerHTML = "";
 
       try {
-        result = await response.json();
-      } catch (error) {
-        result = {
-          ok: false,
-          message: "Resposta invalida do backend.",
-          logs: [`Erro ao interpretar retorno do lote ${batchNumber}: ${error}`],
-          stats: { errors: batch.length }
-        };
-      }
+        const response = await fetch("/api/run-sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
 
-      const resultHadStatsErrors = result && result.stats && Number(result.stats.errors || 0) > 0;
+        const result = await response.json();
 
-      if (!response.ok || result.ok === false) {
-        aggregate.ok = false;
-
-        if (!resultHadStatsErrors) {
-          aggregate.stats.errors = Number(aggregate.stats.errors || 0) + batch.length;
+        if (!result.ok) {
+          executionStatus.className = "status error";
+          executionStatus.textContent = result.error || result.message || "Erro na execucao.";
+        } else {
+          executionStatus.className = "status ok";
+          executionStatus.textContent = dryRun
+            ? "Dry-run finalizado."
+            : "Sincronizacao real finalizada.";
         }
 
-        aggregate.logs.push(`[ERRO] Lote ${batchNumber}/${batches.length}: ${result.message || result.error || "falha na execucao"}`);
-      }
+        renderSummary(result);
+        renderLogs(result.logs || []);
 
-      mergeSyncStats(aggregate.stats, result, batch.length);
-      mergeSyncLogs(aggregate.logs, result);
-
-      if (result.log_file) aggregate.log_file = result.log_file;
-      if (result.log_path) aggregate.log_path = result.log_path;
-
-      processedOrgs += batch.length;
-
-      aggregate.stats.orgs_total = allTargets.length;
-      aggregate.stats.elapsed_seconds = Number(((Date.now() - startedAt) / 1000).toFixed(2));
-
-      updateSyncProgressView({
-        percent: (processedOrgs / allTargets.length) * 100,
-        mode: modeText,
-        batchText: `${batchNumber} / ${batches.length}`,
-        orgText: `${processedOrgs} / ${allTargets.length}`,
-        timeText: `${aggregate.stats.elapsed_seconds}s`,
-        message: `Concluido lote ${batchNumber}/${batches.length}.`
-      });
-
-      if (typeof renderSummary === "function") renderSummary(aggregate);
-      if (typeof renderLogs === "function") renderLogs(aggregate.logs);
-
-      if (i < batches.length - 1) {
-        await sleepSyncProgress(SYNC_BATCH_DELAY_MS_SAFE);
+      } catch (error) {
+        executionStatus.className = "status error";
+        executionStatus.textContent = "Erro inesperado: " + error;
+        logsArea.innerHTML = "";
       }
     }
-
-    aggregate.message = aggregate.ok
-      ? `${modeText} finalizada.`
-      : `${modeText} finalizada com erros.`;
-
-    executionStatus.className = aggregate.ok ? "status ok" : "status error";
-    executionStatus.textContent = aggregate.message;
-
-    updateSyncProgressView({
-      percent: 100,
-      mode: modeText,
-      batchText: `${batches.length} / ${batches.length}`,
-      orgText: `${allTargets.length} / ${allTargets.length}`,
-      timeText: `${aggregate.stats.elapsed_seconds}s`,
-      message: aggregate.message
-    });
-
-    if (typeof renderSummary === "function") renderSummary(aggregate);
-    if (typeof renderLogs === "function") renderLogs(aggregate.logs);
-
-  } catch (error) {
-    executionStatus.className = "status error";
-    executionStatus.textContent = "Erro inesperado: " + error;
-
-    updateSyncProgressView({
-      percent: 0,
-      mode: modeText,
-      batchText: "-",
-      orgText: "-",
-      timeText: `${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
-      message: "Erro inesperado durante a execucao."
-    });
-  } finally {
-    setExecutionButtonsDisabled(false);
-  }
-}
-
 
     function renderSummary(result) {
       const summaryArea = document.getElementById("summaryArea");
